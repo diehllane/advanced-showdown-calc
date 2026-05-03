@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokéDmgCalc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">⚔</span>
+          <span class="logo-text">PokéDmgCalc</span>
+          <span class="logo-gen" id="gen-badge">GEN 7</span>
+        </div>
+        <nav class="top-nav">
+          <button class="nav-btn active" data-view="calc">Damage Calc</button>
+          <button class="nav-btn" data-view="myteams">My Teams</button>
+          <button class="nav-btn" data-view="opponents">Opponents</button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- ── DAMAGE CALC VIEW ── -->
+    <main id="view-calc" class="view active">
+      <div class="calc-layout">
+
+        <!-- Field Conditions Panel -->
+        <section class="panel field-panel">
+          <h2 class="panel-title">Field Conditions</h2>
+
+          <div class="field-section">
+            <label class="field-label">Generation</label>
+            <div class="gen-selector" id="gen-selector">
+              <button class="gen-btn" data-gen="1">RBY</button>
+              <button class="gen-btn" data-gen="2">GSC</button>
+              <button class="gen-btn" data-gen="3">ADV</button>
+              <button class="gen-btn" data-gen="4">DPP</button>
+              <button class="gen-btn" data-gen="5">BW</button>
+              <button class="gen-btn" data-gen="6">XY</button>
+              <button class="gen-btn active" data-gen="7">SM</button>
+              <button class="gen-btn" data-gen="8">SS</button>
+              <button class="gen-btn" data-gen="9">SV</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Weather</label>
+            <div class="toggle-group" id="weather-group">
+              <button class="toggle-btn active" data-val="none">None</button>
+              <button class="toggle-btn" data-val="Sun">☀ Sun</button>
+              <button class="toggle-btn" data-val="Rain">🌧 Rain</button>
+              <button class="toggle-btn" data-val="Sand">🌪 Sand</button>
+              <button class="toggle-btn" data-val="Hail">❄ Hail</button>
+              <button class="toggle-btn" data-val="Harsh Sunshine">☀☀ H.Sun</button>
+              <button class="toggle-btn" data-val="Heavy Rain">🌧🌧 H.Rain</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Terrain</label>
+            <div class="toggle-group" id="terrain-group">
+              <button class="toggle-btn active" data-val="none">None</button>
+              <button class="toggle-btn" data-val="Electric">⚡ Electric</button>
+              <button class="toggle-btn" data-val="Grassy">🌿 Grassy</button>
+              <button class="toggle-btn" data-val="Misty">🌫 Misty</button>
+              <button class="toggle-btn" data-val="Psychic">🔮 Psychic</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Attacker Side</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="att-tailwind"> Tailwind</label>
+              <label class="check-label"><input type="checkbox" id="att-helping"> Helping Hand</label>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Defender Side — Hazards</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="haz-sr"> Stealth Rock</label>
+              <label class="check-label"><input type="checkbox" id="haz-spikes"> Spikes</label>
+              <select id="haz-spikes-layers" class="mini-select">
+                <option value="1">1 Layer</option>
+                <option value="2">2 Layers</option>
+                <option value="3">3 Layers</option>
+              </select>
+              <label class="check-label"><input type="checkbox" id="haz-tspikes"> Toxic Spikes</label>
+              <label class="check-label"><input type="checkbox" id="haz-web"> Sticky Web</label>
+              <label class="check-label"><input type="checkbox" id="def-reflect"> Reflect</label>
+              <label class="check-label"><input type="checkbox" id="def-lightscreen"> Light Screen</label>
+              <label class="check-label"><input type="checkbox" id="def-aurora"> Aurora Veil</label>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Misc</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="field-gravity"> Gravity</label>
+              <label class="check-label"><input type="checkbox" id="field-inverse"> Inverse Battle</label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Left Panel -->
+        <section class="panel pokemon-panel attacker-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">Left</h2>
+            <div class="panel-actions">
+              <button class="icon-btn" id="load-attacker-btn" title="Load saved Pokémon">📂</button>
+              <button class="icon-btn" id="save-attacker-btn" title="Save this Pokémon">💾</button>
+            </div>
+          </div>
+          <div id="attacker-form" class="pokemon-form">
+            <!-- Rendered by JS -->
+          </div>
+        </section>
+
+        <!-- Results Panel -->
+        <section class="panel results-panel">
+          <div class="calc-result" id="calc-result">
+            <div class="result-placeholder">Configure both Pokémon and select a move to see damage.</div>
+          </div>
+          <div class="move-section">
+            <h3 class="move-section-title">Move</h3>
+            <div class="move-inputs" id="move-inputs">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+          <button class="calc-btn" id="calc-btn">Calculate Damage</button>
+          <div class="move-learn-info" id="move-learn-info"></div>
+        </section>
+
+        <!-- Right Panel -->
+        <section class="panel pokemon-panel defender-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">Right</h2>
+            <div class="panel-actions">
+              <button class="icon-btn" id="load-defender-btn" title="Load saved Pokémon">📂</button>
+              <button class="icon-btn" id="save-defender-btn" title="Save this Pokémon">💾</button>
+            </div>
+          </div>
+          <div id="defender-form" class="pokemon-form">
+            <!-- Rendered by JS -->
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- ── MY TEAMS VIEW ── -->
+    <main id="view-myteams" class="view">
+      <div class="teams-layout">
+        <div class="teams-sidebar">
+          <div class="sidebar-header">
+            <h2>My Teams</h2>
+            <button class="action-btn" id="new-team-btn">+ New Team</button>
+          </div>
+          <div id="my-teams-list" class="team-list"></div>
+          <div class="sidebar-header" style="margin-top:2rem">
+            <h2>Opponent Teams</h2>
+          </div>
+          <div id="opp-teams-list" class="team-list"></div>
+        </div>
+        <div class="teams-main" id="team-editor">
+          <div class="placeholder-msg">Select a team from the sidebar or create a new one.</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── OPPONENTS VIEW ── -->
+    <main id="view-opponents" class="view">
+      <div class="opponents-layout">
+        <div class="opponents-sidebar">
+          <div class="sidebar-header">
+            <h2>Opponents</h2>
+            <button class="action-btn" id="new-opponent-btn">+ Add Opponent</button>
+          </div>
+          <div id="opponents-list" class="opponent-list"></div>
+        </div>
+        <div class="opponents-main" id="opponent-detail">
+          <div class="placeholder-msg">Select an opponent to view their teams and notes.</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── MODAL ── -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal">
+        <div class="modal-header">
+          <span class="modal-title" id="modal-title"></span>
+          <button class="modal-close" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- @smogon/calc browserify bundle — includes Generations and all internals -->
+  <script src="/js/smogon-calc.bundle.js"></script>
+  <script src="/js/data.js"></script>
+  <script src="/js/pokemonForm.js"></script>
+  <script src="/js/calc.js"></script>
+  <script src="/js/teams.js"></script>
+  <script src="/js/opponents.js"></script>
+  <script src="/js/app.js"></script>
+  <style>
+    /* ── Coverage Chart ─────────────────────────────────────────────────── */
+    .coverage-chart-wrapper { margin-top: 28px; }
+    .coverage-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border, rgba(255,255,255,0.1));
+      border-radius: 6px;
+      color: var(--text-dim);
+      font-family: var(--font-display, 'Syne', sans-serif);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .coverage-toggle:hover {
+      color: var(--text);
+      border-color: var(--accent, rgba(255,255,255,0.25));
+      background: rgba(255,255,255,0.04);
+    }
+    .coverage-toggle-icon { font-size: 10px; transition: transform 0.15s; }
+    .coverage-chart-container {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      overflow: hidden;
+    }
+    .coverage-chart-container.collapsed { display: none; }
+    .coverage-loading {
+      color: var(--text-dim);
+      font-size: 13px;
+      padding: 16px 0;
+      font-family: var(--font-mono);
+    }
+    .coverage-section { display: flex; flex-direction: column; gap: 10px; }
+    .coverage-title {
+      font-family: var(--font-display, 'Syne', sans-serif);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .coverage-subtitle {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .cov-table-wrap {
+      overflow-x: auto;
+      border-radius: 6px;
+      border: 1px solid var(--border, rgba(255,255,255,0.08));
+    }
+    .cov-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+      font-family: var(--font-mono, 'Space Mono', monospace);
+    }
+    .cov-table thead tr {
+      background: var(--bg-panel, rgba(255,255,255,0.04));
+      border-bottom: 1px solid var(--border, rgba(255,255,255,0.1));
+    }
+    .cov-table tbody tr:nth-child(even) {
+      background: rgba(255,255,255,0.02);
+    }
+    .cov-table tbody tr:hover {
+      background: rgba(255,255,255,0.05);
+    }
+    .cov-type-cell {
+      padding: 5px 8px;
+      white-space: nowrap;
+      min-width: 90px;
+    }
+    .cov-type-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      letter-spacing: 0.02em;
+      font-family: var(--font-display, 'Syne', sans-serif);
+    }
+    .cov-mon-header {
+      padding: 5px 6px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 11px;
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cov-cell {
+      padding: 4px 6px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 36px;
+      border-left: 1px solid rgba(255,255,255,0.03);
+    }
+    .cov-total {
+      padding: 4px 8px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      border-left: 1px solid var(--border, rgba(255,255,255,0.1));
+      color: var(--text-muted);
+    }
+    .cov-total-weak  { color: #f87171; }
+    .cov-total-resist { color: #4ade80; }
+
+    /* Cell color states */
+    .cov-neutral  { color: var(--text-muted); font-weight: 400; }
+    .cov-2x       { background: rgba(248, 113, 113, 0.20); color: #fca5a5; }
+    .cov-4x       { background: rgba(248, 113, 113, 0.40); color: #f87171; }
+    .cov-halfx    { background: rgba(74, 222, 128, 0.15); color: #86efac; }
+    .cov-quartx   { background: rgba(74, 222, 128, 0.28); color: #4ade80; }
+    .cov-immune   { background: rgba(99, 102, 241, 0.20); color: #a5b4fc; }
+  </style>
+</body>
+</html>

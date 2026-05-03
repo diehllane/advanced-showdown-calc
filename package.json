@@ -1,0 +1,21 @@
+{
+  "name": "advanced-showdown-calc",
+  "version": "1.0.0",
+  "description": "Locally hosted Pokémon damage calculator with team management and type coverage charts",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "build:calc": "browserify node_modules/@smogon/calc/dist/production.min.js -o public/js/smogon-calc.bundle.js"
+  },
+  "dependencies": {
+    "@smogon/calc": "^0.9.0",
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.3"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.1",
+    "nodemon": "^3.1.0"
+  }
+}
