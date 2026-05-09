@@ -81,6 +81,7 @@ const TeamsManager = (() => {
       <div class="team-editor-header">
         <h2>${esc(team.name)}</h2>
         <button class="action-btn secondary" id="edit-team-meta-btn">Edit Name/Notes</button>
+        <button class="action-btn secondary" id="pokepaste-btn">⬇ Import Pokepaste</button>
         <button class="action-btn danger" id="delete-team-btn">Delete Team</button>
       </div>
       ${team.notes ? `<p style="color:var(--text-dim);margin-bottom:16px;font-size:13px">${esc(team.notes)}</p>` : ''}
@@ -122,6 +123,7 @@ const TeamsManager = (() => {
     document.getElementById('save-team-btn')?.addEventListener('click', () => saveTeam(team));
     document.getElementById('delete-team-btn')?.addEventListener('click', () => deleteTeam(team));
     document.getElementById('edit-team-meta-btn')?.addEventListener('click', () => openTeamMetaModal(team));
+    document.getElementById('pokepaste-btn')?.addEventListener('click', () => openPokepasteModal(team));
   }
 
   function openSlotEditor(team, slotIdx) {
@@ -254,6 +256,163 @@ const TeamsManager = (() => {
         await saveTeam(team);
       });
     });
+  }
+
+
+  // ── Pokepaste Import ────────────────────────────────────────────────────────
+
+  function openPokepasteModal(team) {
+    openModal('Import Pokepaste', `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p style="font-size:13px;color:var(--text-dim);margin:0">
+          Paste a Showdown export (up to 6 Pokémon). This will replace the current team.
+        </p>
+        <div class="form-row">
+          <label>Pokepaste / Showdown Export</label>
+          <textarea id="pokepaste-input" rows="12" placeholder="Garchomp @ Rocky Helmet&#10;Ability: Rough Skin&#10;..."></textarea>
+        </div>
+        <button class="action-btn" id="confirm-pokepaste-btn">Import</button>
+      </div>
+    `);
+
+    document.getElementById('confirm-pokepaste-btn')?.addEventListener('click', () => {
+      const raw = document.getElementById('pokepaste-input').value.trim();
+      if (!raw) { showToast('Paste is empty', 'error'); return; }
+
+      const parsed = parsePokepaste(raw);
+      if (!parsed.length) { showToast('Could not parse any Pokémon', 'error'); return; }
+
+      team.pokemon = parsed;
+      closeModal();
+      openTeamEditor(team);
+      showToast(`Imported ${parsed.length} Pokémon — save to keep`, 'success');
+    });
+  }
+
+  function parsePokepaste(text) {
+    // Split on blank lines to get individual pokemon blocks
+    const blocks = text.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+    return blocks.slice(0, 6).map(parseOneBlock).filter(Boolean);
+  }
+
+  function parseOneBlock(block) {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return null;
+
+    let species = '', nickname = '', item = '', gender = '';
+
+    // First line: "Nickname (Species) (Gender) @ Item"
+    // or "Species (Gender) @ Item"
+    // or "Species @ Item"
+    const firstLine = lines[0];
+    const atIdx = firstLine.indexOf(' @ ');
+    const headerPart = atIdx >= 0 ? firstLine.slice(0, atIdx) : firstLine;
+    if (atIdx >= 0) item = firstLine.slice(atIdx + 3).trim();
+
+    // Strip trailing gender marker from headerPart
+    const genderMatch = headerPart.match(/^(.*?)\s+\((M|F)\)\s*$/);
+    const headerNoGender = genderMatch ? genderMatch[1].trim() : headerPart.trim();
+    if (genderMatch) gender = genderMatch[2];
+
+    // Check for nickname (Species) pattern
+    const nicknameMatch = headerNoGender.match(/^(.+?)\s+\(([^)]+)\)$/);
+    if (nicknameMatch) {
+      nickname = nicknameMatch[1].trim();
+      species  = nicknameMatch[2].trim();
+    } else {
+      species = headerNoGender.trim();
+    }
+
+    if (!species) return null;
+
+    let ability = '', level = 100, nature = 'Hardy';
+    const moves = [], evs = [0,0,0,0,0,0], ivs = [31,31,31,31,31,31];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Nature (standalone line: "Jolly Nature")
+      const natureAlone = line.match(/^([A-Z][a-z]+)\s+Nature$/);
+      if (natureAlone) { nature = natureAlone[1]; continue; }
+
+      const colonIdx = line.indexOf(':');
+      if (colonIdx < 0) {
+        // Move lines start with -
+        if (line.startsWith('- ') || line.startsWith('-')) {
+          moves.push(line.replace(/^-\s*/, '').trim());
+        }
+        continue;
+      }
+
+      const key = line.slice(0, colonIdx).trim();
+      const val = line.slice(colonIdx + 1).trim();
+
+      if (key === 'Ability')  { ability = val; continue; }
+      if (key === 'Level')    { level = parseInt(val) || 100; continue; }
+
+      if (key === 'EVs') {
+        // "252 Atk / 252 Spe / 4 HP"
+        val.split('/').forEach(part => {
+          const m = part.trim().match(/^(\d+)\s+(.+)$/);
+          if (!m) return;
+          const n = parseInt(m[1]);
+          const stat = m[2].trim().toLowerCase();
+          if (stat === 'hp')  evs[0] = n;
+          else if (stat === 'atk') evs[1] = n;
+          else if (stat === 'def') evs[2] = n;
+          else if (stat === 'spa' || stat === 'spatk') evs[3] = n;
+          else if (stat === 'spd' || stat === 'spdef') evs[4] = n;
+          else if (stat === 'spe' || stat === 'spd' && part.includes('Spe')) evs[5] = n;
+        });
+        // Spe is ambiguous with SpD so handle directly
+        val.split('/').forEach(part => {
+          const m = part.trim().match(/^(\d+)\s+(.+)$/);
+          if (!m) return;
+          const raw = m[2].trim();
+          if (raw === 'Spe') evs[5] = parseInt(m[1]);
+        });
+        continue;
+      }
+
+      if (key === 'IVs') {
+        val.split('/').forEach(part => {
+          const m = part.trim().match(/^(\d+)\s+(.+)$/);
+          if (!m) return;
+          const n = parseInt(m[1]);
+          const stat = m[2].trim();
+          if (stat === 'HP')  ivs[0] = n;
+          else if (stat === 'Atk') ivs[1] = n;
+          else if (stat === 'Def') ivs[2] = n;
+          else if (stat === 'SpA') ivs[3] = n;
+          else if (stat === 'SpD') ivs[4] = n;
+          else if (stat === 'Spe') ivs[5] = n;
+        });
+        continue;
+      }
+
+      // Nature on same line as something else (rare)
+      if (key === 'Nature') { nature = val.replace(' Nature','').trim(); continue; }
+
+      // Moves
+      if (line.startsWith('- ') || line.startsWith('-')) {
+        moves.push(line.replace(/^-\s*/, '').trim());
+      }
+    }
+
+    return {
+      species,
+      nickname: nickname || species,
+      item:     item || 'None',
+      ability,
+      level,
+      nature,
+      gender:   gender || 'M',
+      moves:    moves.slice(0, 4),
+      evs,
+      ivs,
+      boosts:   [0,0,0,0,0,0],
+      status:   '',
+    };
   }
 
   // Expose for OpponentsManager to open a team editor directly
