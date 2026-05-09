@@ -34,6 +34,11 @@ async function sbUpdatePassword(newPassword) {
   if (error) throw error;
 }
 
+async function sbGetUid() {
+  const { data } = await _sb.auth.getUser();
+  return data?.user?.id ?? null;
+}
+
 // ── Teams ─────────────────────────────────────────────────────────────────────
 
 async function dbGetTeams(owner) {
@@ -45,7 +50,9 @@ async function dbGetTeams(owner) {
 }
 
 async function dbCreateTeam({ name, owner, notes, pokemon, gen, opponent_id }) {
+  const user_id = await sbGetUid();
   const { data, error } = await _sb.from('teams').insert({
+    user_id,
     name,
     owner,
     notes: notes || '',
@@ -86,7 +93,9 @@ async function dbGetPokemon({ owner, gen } = {}) {
 }
 
 async function dbCreatePokemon({ nickname, species, owner, gen, data }) {
+  const user_id = await sbGetUid();
   const { data: row, error } = await _sb.from('saved_pokemon').insert({
+    user_id,
     nickname: nickname || species,
     species,
     owner,
@@ -122,7 +131,9 @@ async function dbGetOpponents() {
 }
 
 async function dbCreateOpponent({ name, notes }) {
+  const user_id = await sbGetUid();
   const { data, error } = await _sb.from('opponents').insert({
+    user_id,
     name,
     notes: notes || '',
   }).select().single();
