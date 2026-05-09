@@ -111,6 +111,7 @@ class CalcEngine {
 
     const spikeLayers = parseInt(document.getElementById('haz-spikes-layers')?.value || 1);
     const defSide = new Side({
+      isTailwind: _checked('def-tailwind'),
       steelsurge: _checked('haz-sr'),   // Gen8+ Stealth Rock variant name varies
       spikes: _checked('haz-spikes') ? spikeLayers : 0,
       isSR: _checked('haz-sr'),
@@ -195,23 +196,36 @@ class CalcEngine {
       const leftSpd0  = attacker.stats?.spe ?? this._calcSpeed(leftState,  leftForm);
       const rightSpd0 = defender.stats?.spe ?? this._calcSpeed(rightState, rightForm);
 
-      const isTailwind  = _checked('att-tailwind');
-      const isTrickRoom = _checked('field-trickroom');
-      // Left panel gets tailwind bonus
-      const leftSpd  = activeRole === 'attacker' ? (isTailwind ? leftSpd0 * 2 : leftSpd0) : leftSpd0;
-      const rightSpd = activeRole === 'attacker' ? rightSpd0 : (isTailwind ? rightSpd0 * 2 : rightSpd0);
+      const leftTailwind  = _checked('att-tailwind');
+      const rightTailwind = _checked('def-tailwind');
+      const isTrickRoom   = _checked('field-trickroom');
+      const stickyWeb     = _checked('haz-web'); // applies to the right (defender) side
+      const gen           = window.appState?.currentGen ?? 7;
+
+      // Apply tailwind (×2) and Sticky Web (×0.75 in Gen 6+) per side
+      let leftSpd  = leftTailwind  ? leftSpd0  * 2    : leftSpd0;
+      let rightSpd = rightTailwind ? rightSpd0 * 2    : rightSpd0;
+      if (stickyWeb && gen >= 6) rightSpd = Math.floor(rightSpd * 0.75);
 
       const tie = leftSpd === rightSpd;
       let label, cls;
 
+      const mods = [
+        isTrickRoom              ? 'Trick Room' : '',
+        leftTailwind             ? 'L-Tailwind'  : '',
+        rightTailwind            ? 'R-Tailwind'  : '',
+        (stickyWeb && gen >= 6)  ? 'Sticky Web'  : '',
+      ].filter(Boolean).join(' · ');
+      const modStr = mods ? ` · ${mods}` : '';
+
       if (tie) {
-        label = `Speed tie (${leftSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
+        label = `Speed tie (${leftSpd})${modStr}`;
         cls = 'spd-tie';
       } else if (leftSpd > rightSpd && !isTrickRoom || leftSpd < rightSpd && isTrickRoom) {
-        label = `Left moves first (${leftSpd} vs ${rightSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
+        label = `Left moves first (${leftSpd} vs ${rightSpd})${modStr}`;
         cls = 'spd-faster';
       } else {
-        label = `Right moves first (${rightSpd} vs ${leftSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
+        label = `Right moves first (${rightSpd} vs ${leftSpd})${modStr}`;
         cls = 'spd-slower';
       }
 
@@ -222,16 +236,39 @@ class CalcEngine {
   }
 
   _calcSpeed(state, form) {
-    // Compute effective speed stat from raw inputs (Gen 3+ formula)
+    // Step 1: base stat from PokeAPI species data
     const baseSpd = form?.speciesData?.stats?.speed ?? 0;
     if (!baseSpd) return 0;
+
+    // Step 2: stat value from EVs/IVs/nature/level (Gen 3+ formula)
     const iv  = state.ivs?.[5] ?? 31;
     const ev  = state.evs?.[5] ?? 0;
     const lvl = state.level ?? 50;
     const nat = state.nature ?? 'Hardy';
     const natMod = ['Timid','Hasty','Jolly','Naive'].includes(nat) ? 1.1
                  : ['Brave','Relaxed','Quiet','Sassy'].includes(nat) ? 0.9 : 1;
-    return Math.floor(Math.floor((2 * baseSpd + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
+    let spd = Math.floor(Math.floor((2 * baseSpd + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
+
+    // Step 3: stat stage boosts (index 4 = speed in boosts array [atk,def,spa,spd,spe])
+    const boost = state.boosts?.[4] ?? 0;
+    if (boost !== 0) {
+      const stageMult = boost > 0 ? (2 + boost) / 2 : 2 / (2 - boost);
+      spd = Math.floor(spd * stageMult);
+    }
+
+    // Step 4: held item modifiers
+    const item = state.item ?? '';
+    if (item === 'Choice Scarf')  spd = Math.floor(spd * 1.5);
+    if (item === 'Iron Ball' || item === 'Macho Brace') spd = Math.floor(spd * 0.5);
+    if (item === 'Quick Powder' && (state.species ?? '').toLowerCase() === 'ditto') spd = Math.floor(spd * 2);
+
+    // Step 5: status (paralysis halves speed in Gen 7+, 1/4 in earlier gens)
+    if (state.status === 'Paralysis') {
+      const gen = window.appState?.currentGen ?? 7;
+      spd = Math.floor(spd * (gen >= 7 ? 0.5 : 0.25));
+    }
+
+    return spd;
   }
 
   _koChanceText(dmgRange, defHP) {
