@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokéDmgCalc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ── LOGIN SCREEN ── -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="logo" style="margin-bottom:2rem;justify-content:center">
+        <span class="logo-icon">⚔</span>
+        <span class="logo-text">PokéDmgCalc</span>
+      </div>
+      <div id="login-error" class="login-error hidden"></div>
+      <div class="form-row">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="form-row">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <button class="action-btn" id="login-btn" style="width:100%;margin-top:8px">Sign In</button>
+    </div>
+  </div>
+
+  <!-- ── MAIN APP ── -->
+  <div id="app" class="hidden">
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">⚔</span>
+          <span class="logo-text">PokéDmgCalc</span>
+          <span class="logo-gen" id="gen-badge">GEN 7</span>
+        </div>
+        <nav class="top-nav">
+          <button class="nav-btn active" data-view="calc">Damage Calc</button>
+          <button class="nav-btn" data-view="myteams">My Teams</button>
+          <button class="nav-btn" data-view="opponents">Opponents</button>
+        </nav>
+        <div class="header-user">
+          <span id="header-username" style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)"></span>
+          <button class="icon-btn" id="signout-btn" title="Sign out">⏻</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── DAMAGE CALC VIEW ── -->
+    <main id="view-calc" class="view active">
+      <div class="calc-layout">
+
+        <!-- Field Conditions Panel -->
+        <section class="panel field-panel">
+          <h2 class="panel-title">Field Conditions</h2>
+
+          <div class="field-section">
+            <label class="field-label">Generation</label>
+            <div class="gen-selector" id="gen-selector">
+              <button class="gen-btn" data-gen="1">RBY</button>
+              <button class="gen-btn" data-gen="2">GSC</button>
+              <button class="gen-btn" data-gen="3">ADV</button>
+              <button class="gen-btn" data-gen="4">DPP</button>
+              <button class="gen-btn" data-gen="5">BW</button>
+              <button class="gen-btn" data-gen="6">XY</button>
+              <button class="gen-btn active" data-gen="7">SM</button>
+              <button class="gen-btn" data-gen="8">SS</button>
+              <button class="gen-btn" data-gen="9">SV</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Weather</label>
+            <div class="toggle-group" id="weather-group">
+              <button class="toggle-btn active" data-val="none">None</button>
+              <button class="toggle-btn" data-val="Sun">☀ Sun</button>
+              <button class="toggle-btn" data-val="Rain">🌧 Rain</button>
+              <button class="toggle-btn" data-val="Sand">🌪 Sand</button>
+              <button class="toggle-btn" data-val="Hail">❄ Hail</button>
+              <button class="toggle-btn" data-val="Harsh Sunshine">☀☀ H.Sun</button>
+              <button class="toggle-btn" data-val="Heavy Rain">🌧🌧 H.Rain</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Terrain</label>
+            <div class="toggle-group" id="terrain-group">
+              <button class="toggle-btn active" data-val="none">None</button>
+              <button class="toggle-btn" data-val="Electric">⚡ Electric</button>
+              <button class="toggle-btn" data-val="Grassy">🌿 Grassy</button>
+              <button class="toggle-btn" data-val="Misty">🌫 Misty</button>
+              <button class="toggle-btn" data-val="Psychic">🔮 Psychic</button>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Attacker Side</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="att-tailwind"> Tailwind</label>
+              <label class="check-label"><input type="checkbox" id="att-helping"> Helping Hand</label>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Defender Side — Hazards</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="haz-sr"> Stealth Rock</label>
+              <label class="check-label"><input type="checkbox" id="haz-spikes"> Spikes</label>
+              <select id="haz-spikes-layers" class="mini-select">
+                <option value="1">1 Layer</option>
+                <option value="2">2 Layers</option>
+                <option value="3">3 Layers</option>
+              </select>
+              <label class="check-label"><input type="checkbox" id="haz-tspikes"> Toxic Spikes</label>
+              <label class="check-label"><input type="checkbox" id="haz-web"> Sticky Web</label>
+              <label class="check-label"><input type="checkbox" id="def-reflect"> Reflect</label>
+              <label class="check-label"><input type="checkbox" id="def-lightscreen"> Light Screen</label>
+              <label class="check-label"><input type="checkbox" id="def-aurora"> Aurora Veil</label>
+            </div>
+          </div>
+
+          <div class="field-section">
+            <label class="field-label">Misc</label>
+            <div class="hazard-group">
+              <label class="check-label"><input type="checkbox" id="field-gravity"> Gravity</label>
+              <label class="check-label"><input type="checkbox" id="field-inverse"> Inverse Battle</label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Left Panel -->
+        <section class="panel pokemon-panel attacker-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">Left</h2>
+            <div class="panel-actions">
+              <button class="icon-btn" id="load-attacker-btn" title="Load saved Pokémon">📂</button>
+              <button class="icon-btn" id="save-attacker-btn" title="Save this Pokémon">💾</button>
+            </div>
+          </div>
+          <div id="attacker-form" class="pokemon-form"></div>
+        </section>
+
+        <!-- Results Panel -->
+        <section class="panel results-panel">
+          <div class="calc-result" id="calc-result">
+            <div class="result-placeholder">Configure both Pokémon and select a move to see damage.</div>
+          </div>
+          <div class="move-section">
+            <h3 class="move-section-title">Move</h3>
+            <div class="move-inputs" id="move-inputs"></div>
+          </div>
+          <button class="calc-btn" id="calc-btn">Calculate Damage</button>
+          <div class="move-learn-info" id="move-learn-info"></div>
+        </section>
+
+        <!-- Right Panel -->
+        <section class="panel pokemon-panel defender-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">Right</h2>
+            <div class="panel-actions">
+              <button class="icon-btn" id="load-defender-btn" title="Load saved Pokémon">📂</button>
+              <button class="icon-btn" id="save-defender-btn" title="Save this Pokémon">💾</button>
+            </div>
+          </div>
+          <div id="defender-form" class="pokemon-form"></div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- ── MY TEAMS VIEW ── -->
+    <main id="view-myteams" class="view">
+      <div class="teams-layout">
+        <div class="teams-sidebar">
+          <div class="sidebar-header">
+            <h2>My Teams</h2>
+            <button class="action-btn" id="new-team-btn">+ New Team</button>
+          </div>
+          <div id="my-teams-list" class="team-list"></div>
+          <div class="sidebar-header" style="margin-top:2rem">
+            <h2>Opponent Teams</h2>
+          </div>
+          <div id="opp-teams-list" class="team-list"></div>
+        </div>
+        <div class="teams-main" id="team-editor">
+          <div class="placeholder-msg">Select a team from the sidebar or create a new one.</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── OPPONENTS VIEW ── -->
+    <main id="view-opponents" class="view">
+      <div class="opponents-layout">
+        <div class="opponents-sidebar">
+          <div class="sidebar-header">
+            <h2>Opponents</h2>
+            <button class="action-btn" id="new-opponent-btn">+ Add Opponent</button>
+          </div>
+          <div id="opponents-list" class="opponent-list"></div>
+        </div>
+        <div class="opponents-main" id="opponent-detail">
+          <div class="placeholder-msg">Select an opponent to view their teams and notes.</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── MODAL ── -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal">
+        <div class="modal-header">
+          <span class="modal-title" id="modal-title"></span>
+          <button class="modal-close" id="modal-close">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- Smogon calc -->
+  <script src="https://unpkg.com/@smogon/calc@0.9.0/dist/calc.umd.js"></script>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- App scripts -->
+  <script src="js/supabase-client.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/pokemonForm.js"></script>
+  <script src="js/calc.js"></script>
+  <script src="js/teams.js"></script>
+  <script src="js/opponents.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
