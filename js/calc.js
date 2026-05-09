@@ -137,9 +137,8 @@ class CalcEngine {
     const spikeLayers = parseInt(document.getElementById('haz-spikes-layers')?.value || 1);
     const defSide = new Side({
       isTailwind: _checked('def-tailwind'),
-      steelsurge: _checked('haz-sr'),   // Gen8+ Stealth Rock variant name varies
-      spikes: _checked('haz-spikes') ? spikeLayers : 0,
       isSR: _checked('haz-sr'),
+      spikes: _checked('haz-spikes') ? spikeLayers : 0,
       toxicSpikes: _checked('haz-tspikes') ? 1 : 0,
       isStickyWeb: _checked('haz-web'),
       isReflect: _checked('def-reflect'),
