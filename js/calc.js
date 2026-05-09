@@ -181,10 +181,14 @@ class CalcEngine {
     const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
     const maxPct = ((maxDmg / defMaxHP) * 100).toFixed(1);
 
-    // Smogon kochance accounts for chip + move sequence correctly (e.g. "2HKO after SR").
-    // Use it as primary. Fall back to our own calc against curHP only when smogon has none.
-    const smogonKO = result.kochance?.text ?? null;
-    const koText   = smogonKO ?? this._koChanceText(dmgRange, defCurHP);
+    // When switching in, we manually reduced defender.curHP before calculate().
+    // Smogon's kochance also internally models chip, so using both would double-count.
+    // Use our own _koChanceText against defCurHP when switching in (chip already applied).
+    // Use smogon's kochance when not switching in (more accurate for multi-hit scenarios).
+    const isSwitchingIn = attState.isSwitchingIn || defState.isSwitchingIn;
+    const koText = isSwitchingIn
+      ? this._koChanceText(dmgRange, defCurHP)
+      : (result.kochance?.text ?? this._koChanceText(dmgRange, defCurHP));
 
     // Rolls display (16 damage rolls) — show pct of max HP for readability
     const rollPills = dmgRange.map((d, i) => {
@@ -192,7 +196,7 @@ class CalcEngine {
       return `<span class="roll-pill">${d}<small style="opacity:.6"> (${pct}%)</small></span>`;
     }).join('');
 
-    // Badge color: derive from the same KO text so they always agree
+    // Badge color: derive from the KO text so green box and label always agree
     let koClass = 'safe';
     const koLower = koText.toLowerCase();
     if (koLower.includes('guaranteed ohko') || koLower.startsWith('ohko')) koClass = 'ohko';
