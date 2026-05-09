@@ -152,7 +152,7 @@ class CalcEngine {
 
     // Rolls display (16 damage rolls)
     const rollPills = dmgRange.map((d, i) => {
-      const pct = ((d / defHP) * 100).toFixed(1);
+      const pct = ((d / defMaxHP) * 100).toFixed(1);
       return `<span class="roll-pill">${d}<small style="opacity:.6"> (${pct}%)</small></span>`;
     }).join('');
 
@@ -185,22 +185,24 @@ class CalcEngine {
 
     try {
       // Use smogon/calc's computed stats directly — available after calculate()
-      const attSpd = attacker.stats?.spe ?? this._calcSpeed(attState);
-      const defSpd = defender.stats?.spe ?? this._calcSpeed(defState);
-
-      const isTailwind    = _checked('att-tailwind');
-      const isTrickRoom   = _checked('field-trickroom');
-      const effAttSpd = isTailwind ? attSpd * 2 : attSpd;
-      const effDefSpd = defSpd;
-
-      // Under Trick Room, slower moves first
-      const attGoesFirst = isTrickRoom ? effAttSpd < effDefSpd : effAttSpd > effDefSpd;
-      const tie = effAttSpd === effDefSpd;
-
-      let label, cls;
+      // attState here is the state of whichever panel pressed Use (may be left or right)
+      // We need the original left/right forms to look up speciesData correctly
       const activeRole = window.appState?.activeMoveRole ?? 'attacker';
-      const leftSpd  = activeRole === 'attacker' ? effAttSpd : effDefSpd;
-      const rightSpd = activeRole === 'attacker' ? effDefSpd : effAttSpd;
+      const leftForm  = window.attackerForm;
+      const rightForm = window.defenderForm;
+      const leftState  = activeRole === 'attacker' ? attState : defState;
+      const rightState = activeRole === 'attacker' ? defState : attState;
+      const leftSpd0  = attacker.stats?.spe ?? this._calcSpeed(leftState,  leftForm);
+      const rightSpd0 = defender.stats?.spe ?? this._calcSpeed(rightState, rightForm);
+
+      const isTailwind  = _checked('att-tailwind');
+      const isTrickRoom = _checked('field-trickroom');
+      // Left panel gets tailwind bonus
+      const leftSpd  = activeRole === 'attacker' ? (isTailwind ? leftSpd0 * 2 : leftSpd0) : leftSpd0;
+      const rightSpd = activeRole === 'attacker' ? rightSpd0 : (isTailwind ? rightSpd0 * 2 : rightSpd0);
+
+      const tie = leftSpd === rightSpd;
+      let label, cls;
 
       if (tie) {
         label = `Speed tie (${leftSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
@@ -219,11 +221,10 @@ class CalcEngine {
     }
   }
 
-  _calcSpeed(state) {
+  _calcSpeed(state, form) {
     // Compute effective speed stat from raw inputs (Gen 3+ formula)
-    const baseSpd = window.attackerForm?.speciesData?.stats?.speed
-                 ?? window.defenderForm?.speciesData?.stats?.speed
-                 ?? 0;
+    const baseSpd = form?.speciesData?.stats?.speed ?? 0;
+    if (!baseSpd) return 0;
     const iv  = state.ivs?.[5] ?? 31;
     const ev  = state.evs?.[5] ?? 0;
     const lvl = state.level ?? 50;
@@ -269,12 +270,15 @@ class CalcEngine {
       Fairy:    { Fire:0.5, Poison:0.5, Steel:0.5, Fighting:2, Dragon:2, Dark:2 },
     };
 
-    // Get move type from PokeAPI
+    // Get move type — Hidden Power type comes from slug, not PokeAPI (which returns Normal)
     const moveApiSlug = moveSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    fetchPokeAPI(`/move/${moveApiSlug}`).then(moveData => {
-      const moveType = moveData?.type?.name;
-      if (!moveType) { el.innerHTML = ''; return; }
-      const capType = moveType.charAt(0).toUpperCase() + moveType.slice(1);
+    const hpMatch = moveApiSlug.match(/^hidden-power-(.+)$/);
+    const hpType = hpMatch ? hpMatch[1] : null;
+
+    fetchPokeAPI(`/move/${hpType ? 'hidden-power' : moveApiSlug}`).then(moveData => {
+      const rawType = hpType ?? moveData?.type?.name;
+      if (!rawType) { el.innerHTML = ''; return; }
+      const capType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
       const chart = TYPE_CHART[capType] || {};
 
       // Get defender types from speciesData on the defender form

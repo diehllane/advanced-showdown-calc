@@ -245,8 +245,10 @@ class PokemonForm {
 
   _renderMoves() {
     const moves = this.state.moves.map((mv, i) => {
+      // Match hidden-power-fire etc. against hidden-power in the available moves list
+      const mvBase = mv.startsWith('hidden-power-') ? 'hidden-power' : mv;
       const opts = this.availableMoves.map(m =>
-        `<option value="${m}" ${m===mv?'selected':''}>${_moveName(m)}</option>`
+        `<option value="${m}" ${m===mv || m===mvBase?'selected':''}>${_moveName(m)}</option>`
       ).join('');
       return `
         <div class="move-select-row">
