@@ -81,6 +81,52 @@ document.getElementById('signout-btn')?.addEventListener('click', async () => {
   await SB.signOut();
 });
 
+document.getElementById('change-password-btn')?.addEventListener('click', () => {
+  openModal('Change Password', `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="form-row"><label>New Password</label>
+        <input type="password" id="new-password" placeholder="Min 6 characters" autocomplete="new-password" /></div>
+      <div class="form-row"><label>Confirm Password</label>
+        <input type="password" id="confirm-password" placeholder="Repeat new password" autocomplete="new-password" /></div>
+      <div id="pw-change-error" class="login-error hidden"></div>
+      <button class="action-btn" id="confirm-pw-btn">Update Password</button>
+    </div>
+  `);
+
+  document.getElementById('confirm-pw-btn')?.addEventListener('click', async () => {
+    const newPw  = document.getElementById('new-password').value;
+    const confPw = document.getElementById('confirm-password').value;
+    const errEl  = document.getElementById('pw-change-error');
+    errEl.classList.add('hidden');
+
+    if (newPw.length < 6) {
+      errEl.textContent = 'Password must be at least 6 characters.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (newPw !== confPw) {
+      errEl.textContent = 'Passwords do not match.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    const btn = document.getElementById('confirm-pw-btn');
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+
+    try {
+      await SB.updatePassword(newPw);
+      closeModal();
+      showToast('Password updated!', 'success');
+    } catch(e) {
+      errEl.textContent = e.message || 'Update failed.';
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Update Password';
+    }
+  });
+});
+
 // ── View Switching ────────────────────────────────────────────────────────────
 
 function switchView(viewName) {

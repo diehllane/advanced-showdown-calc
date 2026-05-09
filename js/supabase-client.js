@@ -29,6 +29,11 @@ function sbOnAuthChange(callback) {
   return _sb.auth.onAuthStateChange(callback);
 }
 
+async function sbUpdatePassword(newPassword) {
+  const { error } = await _sb.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
 // ── Teams ─────────────────────────────────────────────────────────────────────
 
 async function dbGetTeams(owner) {
@@ -150,6 +155,7 @@ window.SB = {
   signOut: sbSignOut,
   getSession: sbGetSession,
   onAuthChange: sbOnAuthChange,
+  updatePassword: sbUpdatePassword,
   // Teams
   getTeams: dbGetTeams,
   createTeam: dbCreateTeam,
