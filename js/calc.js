@@ -215,7 +215,16 @@ class CalcEngine {
         <div class="result-ko ${koClass}">${koText || (maxPct >= 100 ? 'OHKO' : '2HKO+')}</div>
         <div class="result-rolls">${rollPills}</div>
         <div style="margin-top:12px;font-size:12px;color:var(--text-dim);font-family:var(--font-mono)">
-          ${result.desc ? result.desc() : ''}
+          ${(() => {
+            const isSwitchingIn = attState.isSwitchingIn || defState.isSwitchingIn;
+            if (isSwitchingIn) {
+              // Build our own desc reflecting actual curHP, not smogon's internal full-HP calc
+              const curHPPct = ((defCurHP / defMaxHP) * 100).toFixed(1);
+              const smogonBase = result.desc ? result.desc().replace(/ -- .+$/, '') : '';
+              return smogonBase + ` -- ${koText} (at ${curHPPct}% HP after hazards)`;
+            }
+            return result.desc ? result.desc() : '';
+          })()}
         </div>
         <div class="speed-tier" id="speed-tier-display"></div>
       </div>
