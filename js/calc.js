@@ -46,27 +46,31 @@ class CalcEngine {
       const attacker = this._buildPokemon(genObj, atkState);
       const defender = this._buildPokemon(genObj, defStateCalc);
 
-      // Apply current HP as integer after construction
+      // Track effective current HP in our own variables — don't rely on
+      // defender.curHP persisting through calculate() on the smogon object.
       const atkMaxHP = attacker.maxHP();
       const defMaxHP = defender.maxHP();
 
-      if (atkState.curHP && atkState.curHP < 100) {
-        attacker.curHP = Math.floor(atkMaxHP * atkState.curHP / 100);
-      }
-      if (defStateCalc.curHP && defStateCalc.curHP < 100) {
-        defender.curHP = Math.floor(defMaxHP * defStateCalc.curHP / 100);
-      }
+      let atkCurHP = atkState.curHP && atkState.curHP < 100
+        ? Math.floor(atkMaxHP * atkState.curHP / 100)
+        : atkMaxHP;
+      let defCurHP = defStateCalc.curHP && defStateCalc.curHP < 100
+        ? Math.floor(defMaxHP * defStateCalc.curHP / 100)
+        : defMaxHP;
 
-      // Switching In: reduce curHP by hazard chip damage before the roll
-      // Attacker switching in = left-side hazards (att-*), defender switching in = right-side hazards (haz-*)
+      // Apply hazard chip for switching-in and reduce our tracked curHP
       if (atkState.isSwitchingIn) {
         const chip = this._calcHazardChip(attacker, atkMaxHP, 'att');
-        attacker.curHP = Math.max(1, (attacker.curHP ?? atkMaxHP) - chip);
+        atkCurHP = Math.max(1, atkCurHP - chip);
       }
       if (defStateCalc.isSwitchingIn) {
         const chip = this._calcHazardChip(defender, defMaxHP, 'haz');
-        defender.curHP = Math.max(1, (defender.curHP ?? defMaxHP) - chip);
+        defCurHP = Math.max(1, defCurHP - chip);
       }
+
+      // Set on the smogon object too (may or may not persist through calculate)
+      attacker.curHP = atkCurHP;
+      defender.curHP = defCurHP;
 
       const moveName = _moveName(activeMoveSlug);
       const move = new Move(genObj, moveName, {
@@ -78,7 +82,7 @@ class CalcEngine {
 
       const calcResult = calculate(genObj, attacker, defender, move, field);
 
-      this._renderResult(result, calcResult, attacker, defender, atkState, defStateCalc, gen, dirLabel);
+      this._renderResult(result, calcResult, attacker, defender, atkState, defStateCalc, gen, dirLabel, defCurHP);
     } catch (e) {
       result.innerHTML = `<div class="result-placeholder" style="color:var(--accent3)">
         Calc error: ${e.message}<br><small>Check species names and move names match the selected generation.</small>
@@ -164,7 +168,7 @@ class CalcEngine {
     });
   }
 
-  _renderResult(container, result, attacker, defender, attState, defState, gen, dirLabel) {
+  _renderResult(container, result, attacker, defender, attState, defState, gen, dirLabel, defCurHP) {
     const dmgRange = result.damage;
     if (!dmgRange || !dmgRange.length) {
       container.innerHTML = `<div class="result-placeholder">No damage (move may not deal damage or data unavailable).</div>`;
@@ -174,8 +178,8 @@ class CalcEngine {
     const minDmg = Math.min(...dmgRange);
     const maxDmg = Math.max(...dmgRange);
     const defMaxHP = defender.maxHP();
-    // curHP accounts for hazard chip (already applied before calculate())
-    const defCurHP = defender.curHP ?? defMaxHP;
+    // Use explicitly passed defCurHP — defender.curHP may not persist through calculate()
+    defCurHP = defCurHP ?? defMaxHP;
 
     // Percentages shown relative to max HP for context
     const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
