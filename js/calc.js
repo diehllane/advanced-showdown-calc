@@ -17,7 +17,7 @@ class CalcEngine {
     if (!result) return;
 
     try {
-      const { Gen, Pokemon, Move, Field, Side, calculate } = window.calc;
+      const { Generations, Pokemon, Move, Field, Side, calculate } = window.calc;
 
       const gen = window.appState?.currentGen ?? 7;
       const attState = window.attackerForm?.getState();
@@ -40,7 +40,7 @@ class CalcEngine {
       const defStateCalc = activeRole === 'attacker' ? defState : attState;
       const dirLabel = activeRole === 'attacker' ? 'Left → Right' : 'Right → Left';
 
-      const genObj = new Gen(gen);
+      const genObj = Generations.get(gen);
 
       // Build Pokémon objects
       const attacker = this._buildPokemon(genObj, atkState);
@@ -93,6 +93,7 @@ class CalcEngine {
 
     // Battle flags
     if (state.isFlashFireActive) opts.abilityOn = true;
+    if (state.isSwitchingOut) opts.isSwitchingOut = true;
 
     return new Pokemon(genObj, state.species, opts);
   }
@@ -183,29 +184,53 @@ class CalcEngine {
     if (!el) return;
 
     try {
-      const attSpd = attacker.stats.spe ?? attacker.rawStats?.spe ?? 0;
-      const defSpd = defender.stats.spe ?? defender.rawStats?.spe ?? 0;
+      // Use smogon/calc's computed stats directly — available after calculate()
+      const attSpd = attacker.stats?.spe ?? this._calcSpeed(attState);
+      const defSpd = defender.stats?.spe ?? this._calcSpeed(defState);
 
-      const isTailwind = _checked('att-tailwind');
+      const isTailwind    = _checked('att-tailwind');
+      const isTrickRoom   = _checked('field-trickroom');
       const effAttSpd = isTailwind ? attSpd * 2 : attSpd;
       const effDefSpd = defSpd;
 
+      // Under Trick Room, slower moves first
+      const attGoesFirst = isTrickRoom ? effAttSpd < effDefSpd : effAttSpd > effDefSpd;
+      const tie = effAttSpd === effDefSpd;
+
       let label, cls;
-      if (effAttSpd > effDefSpd) {
-        label = `Left moves first (${effAttSpd} > ${effDefSpd})`;
-        cls = 'spd-faster';
-      } else if (effAttSpd < effDefSpd) {
-        label = `Right moves first (${effDefSpd} > ${effAttSpd})`;
-        cls = 'spd-slower';
-      } else {
-        label = `Speed tie (${effAttSpd})`;
+      const activeRole = window.appState?.activeMoveRole ?? 'attacker';
+      const leftSpd  = activeRole === 'attacker' ? effAttSpd : effDefSpd;
+      const rightSpd = activeRole === 'attacker' ? effDefSpd : effAttSpd;
+
+      if (tie) {
+        label = `Speed tie (${leftSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
         cls = 'spd-tie';
+      } else if (leftSpd > rightSpd && !isTrickRoom || leftSpd < rightSpd && isTrickRoom) {
+        label = `Left moves first (${leftSpd} vs ${rightSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
+        cls = 'spd-faster';
+      } else {
+        label = `Right moves first (${rightSpd} vs ${leftSpd})${isTrickRoom ? ' · Trick Room' : ''}`;
+        cls = 'spd-slower';
       }
 
       el.innerHTML = `<span class="speed-badge ${cls}">⚡ ${label}</span>`;
     } catch(e) {
       el.innerHTML = '';
     }
+  }
+
+  _calcSpeed(state) {
+    // Compute effective speed stat from raw inputs (Gen 3+ formula)
+    const baseSpd = window.attackerForm?.speciesData?.stats?.speed
+                 ?? window.defenderForm?.speciesData?.stats?.speed
+                 ?? 0;
+    const iv  = state.ivs?.[5] ?? 31;
+    const ev  = state.evs?.[5] ?? 0;
+    const lvl = state.level ?? 50;
+    const nat = state.nature ?? 'Hardy';
+    const natMod = ['Timid','Hasty','Jolly','Naive'].includes(nat) ? 1.1
+                 : ['Brave','Relaxed','Quiet','Sassy'].includes(nat) ? 0.9 : 1;
+    return Math.floor(Math.floor((2 * baseSpd + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
   }
 
   _koChanceText(dmgRange, defHP) {

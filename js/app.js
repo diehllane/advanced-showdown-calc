@@ -175,6 +175,7 @@ document.querySelectorAll('.hazard-group input[type=checkbox]').forEach(cb => {
   cb.addEventListener('change', () => window.appCalc?.scheduleCalc());
 });
 document.getElementById('haz-spikes-layers')?.addEventListener('change', () => window.appCalc?.scheduleCalc());
+document.getElementById('field-trickroom')?.addEventListener('change', () => window.appCalc?.scheduleCalc());
 
 // ── Pokémon Forms ─────────────────────────────────────────────────────────────
 

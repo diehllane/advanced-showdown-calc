@@ -52,9 +52,15 @@ class PokemonForm {
   setState(s) {
     this.state = Object.assign(this._defaultState(), s);
     // Normalise move names to slug format so they match the dropdown values
-    this.state.moves = (this.state.moves || []).map(m =>
-      m ? m.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/-$/, '') : ''
-    );
+    // "Hidden Power [Fire]" -> "hidden-power-fire"
+    this.state.moves = (this.state.moves || []).map(m => {
+      if (!m) return '';
+      return m.toLowerCase()
+        .replace(/\[|\]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/-$/, '');
+    });
     this.render();
     if (this.state.species) this._loadSpeciesData(this.state.species);
   }
@@ -216,6 +222,7 @@ class PokemonForm {
       { id: 'isCriticalHit', label: 'Critical Hit' },
       { id: 'isFlashFireActive', label: 'Flash Fire' },
       { id: 'isMicrobiomeActive', label: 'Microbiome (Gen9)' },
+      { id: 'isSwitchingOut', label: 'Switching Out (Pursuit)' },
     ];
     return `
       <div class="form-row">
@@ -321,7 +328,7 @@ class PokemonForm {
     });
 
     // Flags
-    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive'].forEach(flag => {
+    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut'].forEach(flag => {
       const el = get(`${r}-${flag}`);
       if (el) el.addEventListener('change', () => { this.state[flag] = el.checked; });
     });
