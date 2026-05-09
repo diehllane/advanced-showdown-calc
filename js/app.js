@@ -14,29 +14,36 @@ window.appState = {
 const loginScreen = document.getElementById('login-screen');
 const appEl       = document.getElementById('app');
 
+let _currentUserId = null;
+
 async function initAuth() {
   const session = await SB.getSession();
   if (session) {
-    showApp(session.user);
+    _currentUserId = session.user.id;
+    showApp(session.user, true);
   } else {
     showLogin();
   }
 
   SB.onAuthChange((_event, session) => {
     if (session) {
-      showApp(session.user);
+      const isNewUser = session.user.id !== _currentUserId;
+      _currentUserId = session.user.id;
+      showApp(session.user, isNewUser);
     } else {
+      _currentUserId = null;
       showLogin();
     }
   });
 }
 
-function showApp(user) {
+function showApp(user, resetState = false) {
   loginScreen.classList.add('hidden');
   appEl.classList.remove('hidden');
   const usernameEl = document.getElementById('header-username');
   if (usernameEl) usernameEl.textContent = user.email;
-  resetAppState();
+  // Only reset state on actual user change, not token refreshes
+  if (resetState) resetAppState();
 }
 
 function showLogin() {

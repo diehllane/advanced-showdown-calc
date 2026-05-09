@@ -198,12 +198,10 @@ async function getPokemonMoves(speciesName, gen) {
   try {
     const slug = speciesSlug(speciesName);
     const data = await fetchPokeAPI(`/pokemon/${slug}`);
-    // Accept any move available in any version group up to this gen
-    // PokeAPI doesn't always re-document moves in later games within the same gen
-    const vgs = new Set(GEN_VERSION_GROUPS_CUMULATIVE[gen] || GEN_VERSION_GROUPS_CUMULATIVE[7]);
-    return data.moves
-      .filter(m => m.version_group_details.some(d => vgs.has(d.version_group.name)))
-      .map(m => m.move.name);
+    // Return all moves across all generations — version group filtering was too aggressive
+    // and dropped valid moves PokeAPI records under different groups (e.g. Haze on Toxapex,
+    // Moonblast on Clefable). Smogon/calc handles actual move legality per gen internally.
+    return data.moves.map(m => m.move.name);
   } catch (e) {
     console.warn('getPokemonMoves:', e.message);
     return [];
