@@ -73,8 +73,8 @@ class CalcEngine {
         isCrit: atkState.isCriticalHit,
       });
 
-      // Build field
-      const field = this._buildField(gen);
+      // Build field — pass switching-in state so hazards only affect desc when relevant
+      const field = this._buildField(gen, atkState, defStateCalc);
 
       const calcResult = calculate(genObj, attacker, defender, move, field);
 
@@ -115,35 +115,43 @@ class CalcEngine {
     return new Pokemon(genObj, state.species, opts);
   }
 
-  _buildField(gen) {
+  _buildField(gen, atkState, defState) {
     const { Field, Side } = window.calc;
 
     const weather = _fieldVal('weather-group');
     const terrain = _fieldVal('terrain-group');
 
+    // Hazards (SR, Spikes, T-Spikes, Sticky Web) only feed into the smogon Side
+    // when the Pokémon on that side is switching in — otherwise they don't affect
+    // the damage calc or desc, and would cause spurious "after Stealth Rock" text.
+    const attSwitchingIn = atkState?.isSwitchingIn ?? false;
+    const defSwitchingIn = defState?.isSwitchingIn ?? false;
+
     const attSpikeLayers = parseInt(document.getElementById('att-spikes-layers')?.value || 1);
     const attSide = new Side({
-      isTailwind:   _checked('att-tailwind'),
+      isTailwind:    _checked('att-tailwind'),
       isHelpingHand: _checked('att-helping'),
-      isReflect:    _checked('att-reflect'),
+      isReflect:     _checked('att-reflect'),
       isLightScreen: _checked('att-lightscreen'),
-      isAuroraVeil: _checked('att-aurora'),
-      isSR:         _checked('att-sr'),
-      spikes:       _checked('att-spikes') ? attSpikeLayers : 0,
-      toxicSpikes:  _checked('att-tspikes') ? 1 : 0,
-      isStickyWeb:  _checked('att-web'),
+      isAuroraVeil:  _checked('att-aurora'),
+      // Hazards only when switching in
+      isSR:         attSwitchingIn && _checked('att-sr'),
+      spikes:       attSwitchingIn && _checked('att-spikes') ? attSpikeLayers : 0,
+      toxicSpikes:  attSwitchingIn && _checked('att-tspikes') ? 1 : 0,
+      isStickyWeb:  attSwitchingIn && _checked('att-web'),
     });
 
     const spikeLayers = parseInt(document.getElementById('haz-spikes-layers')?.value || 1);
     const defSide = new Side({
-      isTailwind: _checked('def-tailwind'),
-      isSR: _checked('haz-sr'),
-      spikes: _checked('haz-spikes') ? spikeLayers : 0,
-      toxicSpikes: _checked('haz-tspikes') ? 1 : 0,
-      isStickyWeb: _checked('haz-web'),
-      isReflect: _checked('def-reflect'),
+      isTailwind:    _checked('def-tailwind'),
+      isReflect:     _checked('def-reflect'),
       isLightScreen: _checked('def-lightscreen'),
-      isAuroraVeil: _checked('def-aurora'),
+      isAuroraVeil:  _checked('def-aurora'),
+      // Hazards only when switching in
+      isSR:         defSwitchingIn && _checked('haz-sr'),
+      spikes:       defSwitchingIn && _checked('haz-spikes') ? spikeLayers : 0,
+      toxicSpikes:  defSwitchingIn && _checked('haz-tspikes') ? 1 : 0,
+      isStickyWeb:  defSwitchingIn && _checked('haz-web'),
     });
 
     return new Field({
