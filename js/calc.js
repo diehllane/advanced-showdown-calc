@@ -173,9 +173,10 @@ class CalcEngine {
     const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
     const maxPct = ((maxDmg / defMaxHP) * 100).toFixed(1);
 
-    // KO chance always computed against curHP (= post-chip HP when switching in)
-    // Never use result.kochance.text — it's computed by smogon against maxHP
-    const koText = this._koChanceText(dmgRange, defCurHP);
+    // Smogon kochance accounts for chip + move sequence correctly (e.g. "2HKO after SR").
+    // Use it as primary. Fall back to our own calc against curHP only when smogon has none.
+    const smogonKO = result.kochance?.text ?? null;
+    const koText   = smogonKO ?? this._koChanceText(dmgRange, defCurHP);
 
     // Rolls display (16 damage rolls) — show pct of max HP for readability
     const rollPills = dmgRange.map((d, i) => {
@@ -183,12 +184,11 @@ class CalcEngine {
       return `<span class="roll-pill">${d}<small style="opacity:.6"> (${pct}%)</small></span>`;
     }).join('');
 
-    // KO badge color based on curHP, not maxHP
-    const minPctCur = ((minDmg / defCurHP) * 100);
-    const maxPctCur = ((maxDmg / defCurHP) * 100);
+    // Badge color: derive from the same KO text so they always agree
     let koClass = 'safe';
-    if (maxPctCur >= 100) koClass = 'ohko';
-    else if (minPctCur >= 50) koClass = 'likely';
+    const koLower = koText.toLowerCase();
+    if (koLower.includes('guaranteed ohko') || koLower.startsWith('ohko')) koClass = 'ohko';
+    else if (koLower.includes('guaranteed 2hko') || koLower.includes('2hko')) koClass = 'likely';
 
     container.innerHTML = `
       <div class="result-main">
@@ -305,15 +305,20 @@ class CalcEngine {
   }
 
   _calcHazardChip(pokemon, maxHP, prefix) {
-    // Returns HP lost on switch-in from hazards (integer, same side as prefix)
+    // Returns HP lost on switch-in from hazards (integer)
     // prefix = 'att' for left-side hazards, 'haz' for right-side hazards
+    const form  = prefix === 'att' ? window.attackerForm : window.defenderForm;
+    const types = form?.speciesData?.types ?? [];
+    const state = form?.getState() ?? {};
+    const item  = state.item ?? '';
+    const ability = (state.ability ?? '').toLowerCase();
+    const isMagicGuard = ability === 'magic guard';
+
     let chip = 0;
 
-    // Stealth Rock: Rock-type effectiveness against pokemon's types
-    if (_checked(`${prefix}-sr`)) {
-      // Get types from speciesData on whichever form matches
-      const form = prefix === 'att' ? window.attackerForm : window.defenderForm;
-      const types = form?.speciesData?.types ?? [];
+    // Stealth Rock: Rock-type effectiveness multiplier on 12.5% base
+    // Magic Guard immune; no type is fully immune to SR (0× doesn't exist for Rock attacking)
+    if (_checked(`${prefix}-sr`) && !isMagicGuard) {
       const SR_CHART = {
         Normal:1, Fire:2, Water:0.5, Electric:1, Grass:0.5, Ice:2,
         Fighting:0.5, Poison:1, Ground:0.5, Flying:2, Psychic:1, Bug:1,
@@ -324,13 +329,18 @@ class CalcEngine {
       chip += Math.floor(maxHP * 0.125 * mult);
     }
 
-    // Spikes: 1/8, 1/6, 1/4 for 1/2/3 layers — Ground-types immune
-    if (_checked(`${prefix}-spikes`)) {
-      const form = prefix === 'att' ? window.attackerForm : window.defenderForm;
-      const types = form?.speciesData?.types ?? [];
-      const isGrounded = !types.includes('Flying')
-                      && (form?.getState()?.item ?? '') !== 'Air Balloon';
-      if (isGrounded) {
+    // Spikes: 1/8, 1/6, 1/4 for 1/2/3 layers
+    // Immune: Flying-types, Levitate, Air Balloon, Magic Guard
+    // Iron Ball or Gravity grounds Flying (simple check — Gravity is a field condition)
+    if (_checked(`${prefix}-spikes`) && !isMagicGuard) {
+      const isFlying   = types.includes('Flying');
+      const hasLevitate = ability === 'levitate';
+      const hasAirBalloon = item === 'Air Balloon';
+      const hasIronBall   = item === 'Iron Ball';
+      const isGravity     = _checked('field-gravity');
+      // Grounded if: not Flying (or Iron Ball/Gravity negates Flying), no Levitate, no Air Balloon
+      const ungrounded = (isFlying && !hasIronBall && !isGravity) || hasLevitate || hasAirBalloon;
+      if (!ungrounded) {
         const layersEl = document.getElementById(`${prefix}-spikes-layers`);
         const layers = parseInt(layersEl?.value ?? 1);
         const spikeFrac = layers === 1 ? 1/8 : layers === 2 ? 1/6 : 1/4;
