@@ -32,6 +32,7 @@ class PokemonForm {
       isMicrobiomeActive: false,
       isMinimizeActive: false,
       isSwitchedIn: false,
+      isSwitchingIn: false,
       curHP: null, // null = full HP
     };
   }
@@ -223,6 +224,7 @@ class PokemonForm {
       { id: 'isFlashFireActive', label: 'Flash Fire' },
       { id: 'isMicrobiomeActive', label: 'Microbiome (Gen9)' },
       { id: 'isSwitchingOut', label: 'Switching Out (Pursuit)' },
+      { id: 'isSwitchingIn',  label: 'Switching In (apply hazards)' },
     ];
     return `
       <div class="form-row">
@@ -330,7 +332,7 @@ class PokemonForm {
     });
 
     // Flags
-    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut'].forEach(flag => {
+    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
       const el = get(`${r}-${flag}`);
       if (el) el.addEventListener('change', () => { this.state[flag] = el.checked; });
     });

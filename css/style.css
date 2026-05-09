@@ -566,3 +566,12 @@ h2, h3 { font-weight: 700; }
   letter-spacing: .08em;
   margin-bottom: 6px;
 }
+
+/* ── Switch-in chip note ──────────────────────────────────────────────────── */
+.switch-chip-note {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent2);
+  margin-bottom: 6px;
+  opacity: 0.85;
+}

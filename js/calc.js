@@ -47,8 +47,25 @@ class CalcEngine {
       const defender = this._buildPokemon(genObj, defStateCalc);
 
       // Apply current HP as integer after construction
+      const atkMaxHP = attacker.maxHP();
+      const defMaxHP = defender.maxHP();
+
+      if (atkState.curHP && atkState.curHP < 100) {
+        attacker.curHP = Math.floor(atkMaxHP * atkState.curHP / 100);
+      }
       if (defStateCalc.curHP && defStateCalc.curHP < 100) {
-        defender.curHP = Math.floor(defender.maxHP() * defStateCalc.curHP / 100);
+        defender.curHP = Math.floor(defMaxHP * defStateCalc.curHP / 100);
+      }
+
+      // Switching In: reduce curHP by hazard chip damage before the roll
+      // Attacker switching in = left-side hazards (att-*), defender switching in = right-side hazards (haz-*)
+      if (atkState.isSwitchingIn) {
+        const chip = this._calcHazardChip(attacker, atkMaxHP, 'att');
+        attacker.curHP = Math.max(1, (attacker.curHP ?? atkMaxHP) - chip);
+      }
+      if (defStateCalc.isSwitchingIn) {
+        const chip = this._calcHazardChip(defender, defMaxHP, 'haz');
+        defender.curHP = Math.max(1, (defender.curHP ?? defMaxHP) - chip);
       }
 
       const moveName = _moveName(activeMoveSlug);
@@ -104,9 +121,17 @@ class CalcEngine {
     const weather = _fieldVal('weather-group');
     const terrain = _fieldVal('terrain-group');
 
+    const attSpikeLayers = parseInt(document.getElementById('att-spikes-layers')?.value || 1);
     const attSide = new Side({
-      isTailwind: _checked('att-tailwind'),
+      isTailwind:   _checked('att-tailwind'),
       isHelpingHand: _checked('att-helping'),
+      isReflect:    _checked('att-reflect'),
+      isLightScreen: _checked('att-lightscreen'),
+      isAuroraVeil: _checked('att-aurora'),
+      isSR:         _checked('att-sr'),
+      spikes:       _checked('att-spikes') ? attSpikeLayers : 0,
+      toxicSpikes:  _checked('att-tspikes') ? 1 : 0,
+      isStickyWeb:  _checked('att-web'),
     });
 
     const spikeLayers = parseInt(document.getElementById('haz-spikes-layers')?.value || 1);
@@ -165,6 +190,7 @@ class CalcEngine {
     container.innerHTML = `
       <div class="result-main">
         ${dirLabel ? `<div class="result-direction">${dirLabel}</div>` : ''}
+        ${attState.isSwitchingIn || defState.isSwitchingIn ? `<div class="switch-chip-note">⚠ Switching In: HP reduced by hazard chip before this roll</div>` : ''}
         <div class="result-range">${minDmg}–${maxDmg}</div>
         <div class="result-pct">(${minPct}% – ${maxPct}%)</div>
         <div class="result-ko ${koClass}">${koText || (maxPct >= 100 ? 'OHKO' : '2HKO+')}</div>
@@ -199,13 +225,16 @@ class CalcEngine {
       const leftTailwind  = _checked('att-tailwind');
       const rightTailwind = _checked('def-tailwind');
       const isTrickRoom   = _checked('field-trickroom');
-      const stickyWeb     = _checked('haz-web'); // applies to the right (defender) side
+      const rightStickyWeb = _checked('haz-web');  // right side hazard
+      const leftStickyWeb  = _checked('att-web');  // left side hazard
       const gen           = window.appState?.currentGen ?? 7;
 
       // Apply tailwind (×2) and Sticky Web (×0.75 in Gen 6+) per side
-      let leftSpd  = leftTailwind  ? leftSpd0  * 2    : leftSpd0;
-      let rightSpd = rightTailwind ? rightSpd0 * 2    : rightSpd0;
-      if (stickyWeb && gen >= 6) rightSpd = Math.floor(rightSpd * 0.75);
+      let leftSpd  = leftTailwind  ? leftSpd0 * 2 : leftSpd0;
+      let rightSpd = rightTailwind ? rightSpd0 * 2 : rightSpd0;
+      // Sticky Web slows whichever side it's on
+      if (leftStickyWeb  && gen >= 6) leftSpd  = Math.floor(leftSpd  * 0.75);
+      if (rightStickyWeb && gen >= 6) rightSpd = Math.floor(rightSpd * 0.75);
 
       const tie = leftSpd === rightSpd;
       let label, cls;
@@ -214,7 +243,8 @@ class CalcEngine {
         isTrickRoom              ? 'Trick Room' : '',
         leftTailwind             ? 'L-Tailwind'  : '',
         rightTailwind            ? 'R-Tailwind'  : '',
-        (stickyWeb && gen >= 6)  ? 'Sticky Web'  : '',
+        (leftStickyWeb  && gen >= 6) ? 'L-Sticky Web' : '',
+        (rightStickyWeb && gen >= 6) ? 'R-Sticky Web' : '',
       ].filter(Boolean).join(' · ');
       const modStr = mods ? ` · ${mods}` : '';
 
@@ -269,6 +299,43 @@ class CalcEngine {
     }
 
     return spd;
+  }
+
+  _calcHazardChip(pokemon, maxHP, prefix) {
+    // Returns HP lost on switch-in from hazards (integer, same side as prefix)
+    // prefix = 'att' for left-side hazards, 'haz' for right-side hazards
+    let chip = 0;
+
+    // Stealth Rock: Rock-type effectiveness against pokemon's types
+    if (_checked(`${prefix}-sr`)) {
+      // Get types from speciesData on whichever form matches
+      const form = prefix === 'att' ? window.attackerForm : window.defenderForm;
+      const types = form?.speciesData?.types ?? [];
+      const SR_CHART = {
+        Normal:1, Fire:2, Water:0.5, Electric:1, Grass:0.5, Ice:2,
+        Fighting:0.5, Poison:1, Ground:0.5, Flying:2, Psychic:1, Bug:1,
+        Rock:1, Ghost:1, Dragon:1, Dark:1, Steel:0.5, Fairy:1,
+      };
+      let mult = 1;
+      types.forEach(t => { mult *= SR_CHART[t] ?? 1; });
+      chip += Math.floor(maxHP * 0.125 * mult);
+    }
+
+    // Spikes: 1/8, 1/6, 1/4 for 1/2/3 layers — Ground-types immune
+    if (_checked(`${prefix}-spikes`)) {
+      const form = prefix === 'att' ? window.attackerForm : window.defenderForm;
+      const types = form?.speciesData?.types ?? [];
+      const isGrounded = !types.includes('Flying')
+                      && (form?.getState()?.item ?? '') !== 'Air Balloon';
+      if (isGrounded) {
+        const layersEl = document.getElementById(`${prefix}-spikes-layers`);
+        const layers = parseInt(layersEl?.value ?? 1);
+        const spikeFrac = layers === 1 ? 1/8 : layers === 2 ? 1/6 : 1/4;
+        chip += Math.floor(maxHP * spikeFrac);
+      }
+    }
+
+    return chip;
   }
 
   _koChanceText(dmgRange, defHP) {
