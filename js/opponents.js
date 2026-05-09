@@ -186,5 +186,14 @@ const OpponentsManager = (() => {
     });
   }
 
-  return { loadOpponents, initAddBtn };
+  function reset() {
+    _opponents      = [];
+    _activeOpponent = null;
+    const list   = document.getElementById('opponents-list');
+    const detail = document.getElementById('opponent-detail');
+    if (list)   list.innerHTML   = '';
+    if (detail) detail.innerHTML = '<div class="placeholder-msg">Select an opponent to view their teams and notes.</div>';
+  }
+
+  return { loadOpponents, initAddBtn, reset };
 })();

@@ -36,11 +36,40 @@ function showApp(user) {
   appEl.classList.remove('hidden');
   const usernameEl = document.getElementById('header-username');
   if (usernameEl) usernameEl.textContent = user.email;
+  resetAppState();
 }
 
 function showLogin() {
   appEl.classList.add('hidden');
   loginScreen.classList.remove('hidden');
+  // Reset login form state
+  const btn = document.getElementById('login-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+}
+
+function resetAppState() {
+  // Clear calc forms
+  window.attackerForm?.setState({});
+  window.defenderForm?.setState({});
+  window.appState.activeMoveSlot   = null;
+  window.appState.activeMoveRole   = null;
+  window.appState.attackerActiveMove = null;
+  window.appState.defenderActiveMove = null;
+
+  // Clear result panel
+  const calcResult = document.getElementById('calc-result');
+  if (calcResult) calcResult.innerHTML = '<div class="result-placeholder">Configure both Pokémon and select a move to see damage.</div>';
+  const moveTypeCov = document.getElementById('move-type-coverage');
+  if (moveTypeCov) moveTypeCov.innerHTML = '';
+  const moveLearnInfo = document.getElementById('move-learn-info');
+  if (moveLearnInfo) moveLearnInfo.innerHTML = '';
+
+  // Reset teams and opponents — clear in-memory state and DOM
+  TeamsManager.reset();
+  OpponentsManager.reset();
+
+  // Navigate to calc view
+  switchView('calc');
 }
 
 // Login form

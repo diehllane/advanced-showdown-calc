@@ -562,5 +562,18 @@ const TeamsManager = (() => {
     if (team) openTeamEditor(team);
   }
 
-  return { loadTeams, initNewTeamBtn, openTeamById };
+  function reset() {
+    _myTeams    = [];
+    _oppTeams   = [];
+    _activeTeam = null;
+    // Clear sidebar lists and editor
+    const myList  = document.getElementById('my-teams-list');
+    const oppList = document.getElementById('opp-teams-list');
+    const editor  = document.getElementById('team-editor');
+    if (myList)  myList.innerHTML  = '';
+    if (oppList) oppList.innerHTML = '';
+    if (editor)  editor.innerHTML  = '<div class="placeholder-msg">Select a team from the sidebar or create a new one.</div>';
+  }
+
+  return { loadTeams, initNewTeamBtn, openTeamById, reset };
 })();
