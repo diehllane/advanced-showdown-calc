@@ -28,21 +28,32 @@ class CalcEngine {
         return;
       }
 
-      const activeMoveSlug = window.appState?.attackerActiveMove;
+      const activeRole = window.appState?.activeMoveRole ?? 'attacker';
+      const activeMoveSlug = window.appState?.[`${activeRole}ActiveMove`];
       if (!activeMoveSlug) {
         result.innerHTML = `<div class="result-placeholder">Press "Use" on a move to calculate damage.</div>`;
         return;
       }
 
+      // Determine attacker/defender based on which panel pressed Use
+      const atkState = activeRole === 'attacker' ? attState : defState;
+      const defStateCalc = activeRole === 'attacker' ? defState : attState;
+      const dirLabel = activeRole === 'attacker' ? 'Left → Right' : 'Right → Left';
+
       const genObj = new Gen(gen);
 
       // Build Pokémon objects
-      const attacker = this._buildPokemon(genObj, attState);
-      const defender = this._buildPokemon(genObj, defState);
+      const attacker = this._buildPokemon(genObj, atkState);
+      const defender = this._buildPokemon(genObj, defStateCalc);
+
+      // Apply current HP as integer after construction
+      if (defStateCalc.curHP && defStateCalc.curHP < 100) {
+        defender.curHP = Math.floor(defender.maxHP() * defStateCalc.curHP / 100);
+      }
 
       const moveName = _moveName(activeMoveSlug);
       const move = new Move(genObj, moveName, {
-        isCrit: attState.isCriticalHit,
+        isCrit: atkState.isCriticalHit,
       });
 
       // Build field
@@ -50,7 +61,7 @@ class CalcEngine {
 
       const calcResult = calculate(genObj, attacker, defender, move, field);
 
-      this._renderResult(result, calcResult, defender);
+      this._renderResult(result, calcResult, attacker, defender, atkState, defStateCalc, gen, dirLabel);
     } catch (e) {
       result.innerHTML = `<div class="result-placeholder" style="color:var(--accent3)">
         Calc error: ${e.message}<br><small>Check species names and move names match the selected generation.</small>
@@ -79,12 +90,6 @@ class CalcEngine {
     if (state.ability) opts.ability = state.ability;
     if (state.status) opts.status = state.status;
     if (state.gender && state.gender !== 'N') opts.gender = state.gender;
-
-    // Current HP override
-    if (state.curHP && state.curHP < 100) {
-      // We'll set this as a fraction after construction
-      opts.curHP = state.curHP / 100;
-    }
 
     // Battle flags
     if (state.isFlashFireActive) opts.abilityOn = true;
@@ -125,7 +130,7 @@ class CalcEngine {
     });
   }
 
-  _renderResult(container, result, defender) {
+  _renderResult(container, result, attacker, defender, attState, defState, gen, dirLabel) {
     const dmgRange = result.damage;
     if (!dmgRange || !dmgRange.length) {
       container.innerHTML = `<div class="result-placeholder">No damage (move may not deal damage or data unavailable).</div>`;
@@ -134,13 +139,15 @@ class CalcEngine {
 
     const minDmg = Math.min(...dmgRange);
     const maxDmg = Math.max(...dmgRange);
-    const defHP = defender.maxHP();
+    const defMaxHP = defender.maxHP();
+    // Use current HP for KO rolls if set below 100%
+    const defCurHP = defender.curHP ?? defMaxHP;
 
-    const minPct = ((minDmg / defHP) * 100).toFixed(1);
-    const maxPct = ((maxDmg / defHP) * 100).toFixed(1);
+    const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
+    const maxPct = ((maxDmg / defMaxHP) * 100).toFixed(1);
 
-    // KO chance
-    const koText = result.kochance?.text ?? this._koChanceText(dmgRange, defHP);
+    // KO chance against current HP
+    const koText = result.kochance?.text ?? this._koChanceText(dmgRange, defCurHP);
 
     // Rolls display (16 damage rolls)
     const rollPills = dmgRange.map((d, i) => {
@@ -155,6 +162,7 @@ class CalcEngine {
 
     container.innerHTML = `
       <div class="result-main">
+        ${dirLabel ? `<div class="result-direction">${dirLabel}</div>` : ''}
         <div class="result-range">${minDmg}–${maxDmg}</div>
         <div class="result-pct">(${minPct}% – ${maxPct}%)</div>
         <div class="result-ko ${koClass}">${koText || (maxPct >= 100 ? 'OHKO' : '2HKO+')}</div>
@@ -162,8 +170,42 @@ class CalcEngine {
         <div style="margin-top:12px;font-size:12px;color:var(--text-dim);font-family:var(--font-mono)">
           ${result.desc ? result.desc() : ''}
         </div>
+        <div class="speed-tier" id="speed-tier-display"></div>
       </div>
     `;
+
+    // Speed tier comparison
+    this._renderSpeedTier(attacker, defender, attState, defState);
+  }
+
+  _renderSpeedTier(attacker, defender, attState, defState) {
+    const el = document.getElementById('speed-tier-display');
+    if (!el) return;
+
+    try {
+      const attSpd = attacker.stats.spe ?? attacker.rawStats?.spe ?? 0;
+      const defSpd = defender.stats.spe ?? defender.rawStats?.spe ?? 0;
+
+      const isTailwind = _checked('att-tailwind');
+      const effAttSpd = isTailwind ? attSpd * 2 : attSpd;
+      const effDefSpd = defSpd;
+
+      let label, cls;
+      if (effAttSpd > effDefSpd) {
+        label = `Left moves first (${effAttSpd} > ${effDefSpd})`;
+        cls = 'spd-faster';
+      } else if (effAttSpd < effDefSpd) {
+        label = `Right moves first (${effDefSpd} > ${effAttSpd})`;
+        cls = 'spd-slower';
+      } else {
+        label = `Speed tie (${effAttSpd})`;
+        cls = 'spd-tie';
+      }
+
+      el.innerHTML = `<span class="speed-badge ${cls}">⚡ ${label}</span>`;
+    } catch(e) {
+      el.innerHTML = '';
+    }
   }
 
   _koChanceText(dmgRange, defHP) {
@@ -174,6 +216,67 @@ class CalcEngine {
     if (twoHKOs === 16) return 'Guaranteed 2HKO';
     if (twoHKOs > 0) return `2HKO ${Math.round((twoHKOs/16)*100)}% of the time`;
     return 'Does not KO in 2 hits';
+  }
+
+  showMoveTypeCoverage(moveSlug, defState) {
+    const el = document.getElementById('move-type-coverage');
+    if (!el || !moveSlug || !defState?.species) { if (el) el.innerHTML = ''; return; }
+
+    // Type chart: attacking type -> array of [defending type, multiplier]
+    const TYPE_CHART = {
+      Normal:   { Ghost:0, Rock:0.5, Steel:0.5 },
+      Fire:     { Fire:0.5, Water:0.5, Rock:0.5, Dragon:0.5, Grass:2, Ice:2, Bug:2, Steel:2 },
+      Water:    { Water:0.5, Grass:0.5, Dragon:0.5, Fire:2, Ground:2, Rock:2 },
+      Electric: { Electric:0.5, Grass:0.5, Dragon:0.5, Ground:0, Flying:2, Water:2 },
+      Grass:    { Fire:0.5, Grass:0.5, Poison:0.5, Flying:0.5, Bug:0.5, Dragon:0.5, Steel:0.5, Water:2, Ground:2, Rock:2 },
+      Ice:      { Water:0.5, Ice:0.5, Fire:0.5, Steel:0.5, Grass:2, Ground:2, Flying:2, Dragon:2 },
+      Fighting: { Poison:0.5, Flying:0.5, Psychic:0.5, Bug:0.5, Ghost:0, Normal:2, Ice:2, Rock:2, Dark:2, Steel:2 },
+      Poison:   { Poison:0.5, Ground:0.5, Rock:0.5, Ghost:0.5, Steel:0, Grass:2, Fairy:2 },
+      Ground:   { Grass:0.5, Bug:0.5, Flying:0, Fire:2, Electric:2, Poison:2, Rock:2, Steel:2 },
+      Flying:   { Electric:0.5, Rock:0.5, Steel:0.5, Grass:2, Fighting:2, Bug:2 },
+      Psychic:  { Psychic:0.5, Steel:0.5, Dark:0, Fighting:2, Poison:2 },
+      Bug:      { Fire:0.5, Flying:0.5, Fighting:0.5, Ghost:0.5, Steel:0.5, Fairy:0.5, Grass:2, Psychic:2, Dark:2 },
+      Rock:     { Fighting:0.5, Ground:0.5, Steel:0.5, Fire:2, Ice:2, Flying:2, Bug:2 },
+      Ghost:    { Normal:0, Dark:0.5, Ghost:2, Psychic:2 },
+      Dragon:   { Steel:0.5, Dragon:2, Fairy:0 },
+      Dark:     { Fighting:0.5, Dark:0.5, Fairy:0.5, Ghost:2, Psychic:2 },
+      Steel:    { Fire:0.5, Water:0.5, Electric:0.5, Steel:0.5, Ice:2, Rock:2, Fairy:2 },
+      Fairy:    { Fire:0.5, Poison:0.5, Steel:0.5, Fighting:2, Dragon:2, Dark:2 },
+    };
+
+    // Get move type from PokeAPI
+    const moveApiSlug = moveSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    fetchPokeAPI(`/move/${moveApiSlug}`).then(moveData => {
+      const moveType = moveData?.type?.name;
+      if (!moveType) { el.innerHTML = ''; return; }
+      const capType = moveType.charAt(0).toUpperCase() + moveType.slice(1);
+      const chart = TYPE_CHART[capType] || {};
+
+      // Get defender types from speciesData on the defender form
+      const defSpeciesData = window.defenderForm?.speciesData;
+      const defTypes = defSpeciesData?.types || [];
+      if (!defTypes.length) { el.innerHTML = ''; return; }
+
+      let multiplier = 1;
+      defTypes.forEach(dt => {
+        multiplier *= chart[dt] ?? 1;
+      });
+
+      let badge, badgeCls;
+      if (multiplier === 0)    { badge = 'Immune (0×)';    badgeCls = 'type-immune'; }
+      else if (multiplier >= 4){ badge = 'Super Effective (4×)'; badgeCls = 'type-se'; }
+      else if (multiplier >= 2){ badge = 'Super Effective (2×)'; badgeCls = 'type-se'; }
+      else if (multiplier <= 0.25){ badge = 'Not Very Effective (¼×)'; badgeCls = 'type-nve'; }
+      else if (multiplier < 1) { badge = 'Not Very Effective (½×)'; badgeCls = 'type-nve'; }
+      else                     { badge = 'Neutral (1×)';   badgeCls = 'type-neutral'; }
+
+      const typeColor = capType.toLowerCase();
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="type-badge type-${typeColor}">${capType}</span>
+          <span class="coverage-badge ${badgeCls}">${badge}</span>
+        </div>`;
+    }).catch(() => { el.innerHTML = ''; });
   }
 
   async showLearnMethod(species, moveSlug, gen) {

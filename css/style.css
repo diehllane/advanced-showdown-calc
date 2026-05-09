@@ -169,7 +169,7 @@ h2, h3 { font-weight: 700; }
 
 .stat-row {
   display: grid;
-  grid-template-columns: 40px 50px 50px 1fr 50px 50px;
+  grid-template-columns: 40px 64px 64px 1fr 50px 58px;
   gap: 4px; align-items: center;
 }
 .stat-label { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); font-weight: 700; }
@@ -511,4 +511,58 @@ h2, h3 { font-weight: 700; }
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* ── Speed Tier ───────────────────────────────────────────────────────────── */
+
+.speed-tier { margin-top: 10px; }
+.speed-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.spd-faster  { background: rgba(34,197,94,.18); color: #4ade80; border: 1px solid rgba(34,197,94,.3); }
+.spd-slower  { background: rgba(239,68,68,.18);  color: #f87171; border: 1px solid rgba(239,68,68,.3); }
+.spd-tie     { background: rgba(234,179,8,.18);  color: #facc15; border: 1px solid rgba(234,179,8,.3); }
+
+/* ── Move Type Coverage (calc page) ──────────────────────────────────────── */
+
+.coverage-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.type-se      { background: rgba(34,197,94,.18);  color: #4ade80; border: 1px solid rgba(34,197,94,.3); }
+.type-nve     { background: rgba(239,68,68,.18);  color: #f87171; border: 1px solid rgba(239,68,68,.3); }
+.type-immune  { background: rgba(100,100,100,.2); color: #9ca3af; border: 1px solid #374151; }
+.type-neutral { background: rgba(99,102,241,.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,.3); }
+
+/* ── Team Coverage Charts ─────────────────────────────────────────────────── */
+
+.coverage-section { font-size: 12px; }
+.coverage-title { font-size: 13px; color: var(--text-dim); margin: 0 0 8px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .05em; }
+.coverage-scroll { overflow-x: auto; }
+.coverage-table { border-collapse: collapse; min-width: 100%; font-size: 11px; font-family: var(--font-mono); }
+.coverage-table th { padding: 4px 6px; background: var(--bg-base); color: var(--text-muted); text-align: center; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.coverage-table td { padding: 3px 6px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.04); }
+.cov-type-label { text-align: left !important; color: var(--text-dim); padding-left: 8px !important; }
+.cov-se     { background: rgba(34,197,94,.2);  color: #4ade80; }
+.cov-nve    { background: rgba(239,68,68,.18); color: #f87171; }
+.cov-immune { background: rgba(100,100,100,.2); color: #6b7280; }
+.cov-count  { font-weight: 700; }
+.cov-weak   { color: #f87171; }
+.cov-res    { color: #4ade80; }
+
+/* ── Calc Direction Label ─────────────────────────────────────────────────── */
+.result-direction {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 6px;
 }

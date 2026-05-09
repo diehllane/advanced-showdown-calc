@@ -260,9 +260,6 @@ async function loadPokemonModal(role) {
 
 // ── Calculate button ──────────────────────────────────────────────────────────
 
-document.getElementById('calc-btn')?.addEventListener('click', () => {
-  window.appCalc?.runCalc();
-});
 
 // ── Modal helpers ─────────────────────────────────────────────────────────────
 

@@ -87,6 +87,10 @@ const TeamsManager = (() => {
       ${team.notes ? `<p style="color:var(--text-dim);margin-bottom:16px;font-size:13px">${esc(team.notes)}</p>` : ''}
       <div class="team-slots">${slots}</div>
       <button class="action-btn" id="save-team-btn">Save Team</button>
+      <div style="margin-top:16px">
+        <button class="action-btn secondary" id="coverage-toggle-btn">▶ Type Coverage</button>
+        <div id="coverage-container" style="display:none;margin-top:12px"></div>
+      </div>
     `;
 
     editor.querySelectorAll('.team-slot.empty').forEach(slot => {
@@ -124,6 +128,7 @@ const TeamsManager = (() => {
     document.getElementById('delete-team-btn')?.addEventListener('click', () => deleteTeam(team));
     document.getElementById('edit-team-meta-btn')?.addEventListener('click', () => openTeamMetaModal(team));
     document.getElementById('pokepaste-btn')?.addEventListener('click', () => openPokepasteModal(team));
+    document.getElementById('coverage-toggle-btn')?.addEventListener('click', () => toggleCoverage(team, 'coverage-toggle-btn', 'coverage-container'));
   }
 
   function openSlotEditor(team, slotIdx) {
@@ -413,6 +418,142 @@ const TeamsManager = (() => {
       boosts:   [0,0,0,0,0,0],
       status:   '',
     };
+  }
+
+
+  // ── Type Coverage Charts ─────────────────────────────────────────────────────
+
+  const ALL_TYPES = [
+    'Normal','Fire','Water','Electric','Grass','Ice','Fighting','Poison',
+    'Ground','Flying','Psychic','Bug','Rock','Ghost','Dragon','Dark','Steel','Fairy'
+  ];
+
+  const TYPE_CHART = {
+    Normal:   { Ghost:0, Rock:0.5, Steel:0.5 },
+    Fire:     { Fire:0.5, Water:0.5, Rock:0.5, Dragon:0.5, Grass:2, Ice:2, Bug:2, Steel:2 },
+    Water:    { Water:0.5, Grass:0.5, Dragon:0.5, Fire:2, Ground:2, Rock:2 },
+    Electric: { Electric:0.5, Grass:0.5, Dragon:0.5, Ground:0, Flying:2, Water:2 },
+    Grass:    { Fire:0.5, Grass:0.5, Poison:0.5, Flying:0.5, Bug:0.5, Dragon:0.5, Steel:0.5, Water:2, Ground:2, Rock:2 },
+    Ice:      { Water:0.5, Ice:0.5, Fire:0.5, Steel:0.5, Grass:2, Ground:2, Flying:2, Dragon:2 },
+    Fighting: { Poison:0.5, Flying:0.5, Psychic:0.5, Bug:0.5, Ghost:0, Normal:2, Ice:2, Rock:2, Dark:2, Steel:2 },
+    Poison:   { Poison:0.5, Ground:0.5, Rock:0.5, Ghost:0.5, Steel:0, Grass:2, Fairy:2 },
+    Ground:   { Grass:0.5, Bug:0.5, Flying:0, Fire:2, Electric:2, Poison:2, Rock:2, Steel:2 },
+    Flying:   { Electric:0.5, Rock:0.5, Steel:0.5, Grass:2, Fighting:2, Bug:2 },
+    Psychic:  { Psychic:0.5, Steel:0.5, Dark:0, Fighting:2, Poison:2 },
+    Bug:      { Fire:0.5, Flying:0.5, Fighting:0.5, Ghost:0.5, Steel:0.5, Fairy:0.5, Grass:2, Psychic:2, Dark:2 },
+    Rock:     { Fighting:0.5, Ground:0.5, Steel:0.5, Fire:2, Ice:2, Flying:2, Bug:2 },
+    Ghost:    { Normal:0, Dark:0.5, Ghost:2, Psychic:2 },
+    Dragon:   { Steel:0.5, Dragon:2, Fairy:0 },
+    Dark:     { Fighting:0.5, Dark:0.5, Fairy:0.5, Ghost:2, Psychic:2 },
+    Steel:    { Fire:0.5, Water:0.5, Electric:0.5, Steel:0.5, Ice:2, Rock:2, Fairy:2 },
+    Fairy:    { Fire:0.5, Poison:0.5, Steel:0.5, Fighting:2, Dragon:2, Dark:2 },
+  };
+
+  function getMultiplier(atkType, defTypes) {
+    let m = 1;
+    const chart = TYPE_CHART[atkType] || {};
+    defTypes.forEach(dt => { m *= chart[dt] ?? 1; });
+    return m;
+  }
+
+  function multCell(m) {
+    if (m === 0)    return { text:'0×',   cls:'cov-immune' };
+    if (m >= 4)     return { text:'4×',   cls:'cov-se' };
+    if (m >= 2)     return { text:'2×',   cls:'cov-se' };
+    if (m <= 0.25)  return { text:'¼×',   cls:'cov-nve' };
+    if (m < 1)      return { text:'½×',   cls:'cov-nve' };
+    return           { text:'1×',   cls:'' };
+  }
+
+  async function renderCoverageChart(team, containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:12px">Loading type data…</p>';
+
+    const pokemon = (team.pokemon || []).filter(p => p?.species);
+    if (!pokemon.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:12px">No Pokémon in team.</p>'; return; }
+
+    // Fetch types for each member
+    const memberTypes = await Promise.all(pokemon.map(async pk => {
+      try {
+        const data = await getPokemonBaseData(pk.species);
+        return { name: pk.species, types: data?.types || [] };
+      } catch { return { name: pk.species, types: [] }; }
+    }));
+
+    // Fetch move types for offensive coverage
+    const memberMovetypes = await Promise.all(pokemon.map(async pk => {
+      const moveTypes = new Set();
+      for (const mv of (pk.moves || []).filter(Boolean)) {
+        try {
+          const slug = mv.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+          const d = await fetchPokeAPI(`/move/${slug}`);
+          if (d?.type?.name) moveTypes.add(d.type.name.charAt(0).toUpperCase() + d.type.name.slice(1));
+        } catch {}
+      }
+      return [...moveTypes];
+    }));
+
+    // ── Defensive Coverage Table ──────────────────────────────────────────────
+    const defHeader = `<tr><th>Atk Type</th>${memberTypes.map(m=>`<th style="font-size:11px">${esc(m.name)}</th>`).join('')}<th>Weak</th><th>Res/Imm</th></tr>`;
+    const defRows = ALL_TYPES.map(atkType => {
+      let weakCount = 0, resCount = 0;
+      const cells = memberTypes.map(m => {
+        const mult = getMultiplier(atkType, m.types);
+        const { text, cls } = multCell(mult);
+        if (mult >= 2) weakCount++;
+        if (mult <= 0.5) resCount++;
+        return `<td class="${cls}">${text}</td>`;
+      }).join('');
+      return `<tr><td class="cov-type-label">${atkType}</td>${cells}<td class="cov-count cov-weak">${weakCount||''}</td><td class="cov-count cov-res">${resCount||''}</td></tr>`;
+    }).join('');
+
+    // ── Offensive Coverage Table ──────────────────────────────────────────────
+    const offHeader = `<tr><th>Def Type</th>${memberTypes.map(m=>`<th style="font-size:11px">${esc(m.name)}</th>`).join('')}<th>SE</th><th>NVE</th></tr>`;
+    const offRows = ALL_TYPES.map(defType => {
+      let seCount = 0, nveCount = 0;
+      const cells = memberMovetypes.map(moveTypes => {
+        let best = 0;
+        moveTypes.forEach(mt => { best = Math.max(best, getMultiplier(mt, [defType])); });
+        if (!moveTypes.length) return '<td style="opacity:.3">—</td>';
+        const { text, cls } = multCell(best);
+        if (best >= 2) seCount++;
+        if (best < 1 && best > 0) nveCount++;
+        return `<td class="${cls}">${text}</td>`;
+      }).join('');
+      return `<tr><td class="cov-type-label">${defType}</td>${cells}<td class="cov-count cov-se">${seCount||''}</td><td class="cov-count cov-nve">${nveCount||''}</td></tr>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="coverage-section">
+        <h4 class="coverage-title">Defensive Coverage</h4>
+        <div class="coverage-scroll">
+          <table class="coverage-table"><thead>${defHeader}</thead><tbody>${defRows}</tbody></table>
+        </div>
+        <h4 class="coverage-title" style="margin-top:16px">Offensive Coverage</h4>
+        <div class="coverage-scroll">
+          <table class="coverage-table"><thead>${offHeader}</thead><tbody>${offRows}</tbody></table>
+        </div>
+      </div>
+    `;
+  }
+
+  function toggleCoverage(team, btnId, containerId) {
+    const btn = document.getElementById(btnId);
+    const container = document.getElementById(containerId);
+    if (!btn || !container) return;
+    const isOpen = container.style.display !== 'none';
+    if (isOpen) {
+      container.style.display = 'none';
+      btn.textContent = '▶ Type Coverage';
+    } else {
+      container.style.display = 'block';
+      btn.textContent = '▼ Type Coverage';
+      if (!container.dataset.loaded) {
+        container.dataset.loaded = '1';
+        renderCoverageChart(team, containerId);
+      }
+    }
   }
 
   // Expose for OpponentsManager to open a team editor directly

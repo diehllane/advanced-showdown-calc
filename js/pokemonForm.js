@@ -51,6 +51,10 @@ class PokemonForm {
 
   setState(s) {
     this.state = Object.assign(this._defaultState(), s);
+    // Normalise move names to slug format so they match the dropdown values
+    this.state.moves = (this.state.moves || []).map(m =>
+      m ? m.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/-$/, '') : ''
+    );
     this.render();
     if (this.state.species) this._loadSpeciesData(this.state.species);
   }
@@ -174,7 +178,7 @@ class PokemonForm {
     });
     return `
       <div class="form-row" style="gap:6px">
-        <div style="display:grid;grid-template-columns:40px 50px 50px 1fr 50px 50px;gap:4px;margin-bottom:3px;">
+        <div style="display:grid;grid-template-columns:40px 64px 64px 1fr 50px 58px;gap:4px;margin-bottom:3px;">
           <span class="field-label">Stat</span>
           <span class="field-label">IV</span>
           <span class="field-label">EV</span>
@@ -342,10 +346,12 @@ class PokemonForm {
         if (!moveSlug) return;
         if (!window.appState) window.appState = {};
         window.appState.activeMoveSlot = idx;
+        window.appState.activeMoveRole = this.role;
         window.appState[`${this.role}ActiveMove`] = moveSlug;
         window.appCalc?.scheduleCalc();
-        // Show learn methods
+        // Show learn method and type coverage
         window.appCalc?.showLearnMethod(this.state.species, moveSlug, this.currentGen);
+        window.appCalc?.showMoveTypeCoverage(moveSlug, window.defenderForm?.getState());
       });
     });
   }
