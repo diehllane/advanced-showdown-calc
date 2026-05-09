@@ -295,6 +295,7 @@ class PokemonForm {
       if (el) el.addEventListener('change', () => {
         this.state[key] = parser ? parser(el.value) : el.value;
         if (key === 'nature') this.render(); // re-render for colour highlights
+        window.appCalc?.scheduleCalc();
       });
     };
     bind(`${r}-level`, 'level', parseInt);
@@ -308,20 +309,22 @@ class PokemonForm {
     this.container.querySelectorAll('.iv-input').forEach(el => {
       el.addEventListener('change', () => {
         this.state.ivs[+el.dataset.stat] = parseInt(el.value) || 0;
+        window.appCalc?.scheduleCalc();
       });
     });
     this.container.querySelectorAll('.ev-input').forEach(el => {
       el.addEventListener('change', () => {
         this.state.evs[+el.dataset.stat] = parseInt(el.value) || 0;
-        // update bar
         const bar = el.closest('.stat-row')?.querySelector('.stat-bar');
         if (bar) bar.style.width = Math.round((+el.value/252)*100) + '%';
+        window.appCalc?.scheduleCalc();
       });
     });
     this.container.querySelectorAll('.boost-input').forEach(el => {
       el.addEventListener('change', () => {
         const statIdx = +el.dataset.stat;
         if (statIdx > 0) this.state.boosts[statIdx - 1] = parseInt(el.value) || 0;
+        window.appCalc?.scheduleCalc();
       });
     });
 
@@ -329,12 +332,16 @@ class PokemonForm {
     const curHPEl = get(`${r}-curhp`);
     if (curHPEl) curHPEl.addEventListener('change', () => {
       this.state.curHP = parseInt(curHPEl.value) || 100;
+      window.appCalc?.scheduleCalc();
     });
 
     // Flags
     ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
       const el = get(`${r}-${flag}`);
-      if (el) el.addEventListener('change', () => { this.state[flag] = el.checked; });
+      if (el) el.addEventListener('change', () => {
+        this.state[flag] = el.checked;
+        window.appCalc?.scheduleCalc();
+      });
     });
 
     // Move selects
