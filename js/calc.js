@@ -166,25 +166,29 @@ class CalcEngine {
     const minDmg = Math.min(...dmgRange);
     const maxDmg = Math.max(...dmgRange);
     const defMaxHP = defender.maxHP();
-    // Use current HP for KO rolls if set below 100%
+    // curHP accounts for hazard chip (already applied before calculate())
     const defCurHP = defender.curHP ?? defMaxHP;
 
+    // Percentages shown relative to max HP for context
     const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
     const maxPct = ((maxDmg / defMaxHP) * 100).toFixed(1);
 
-    // KO chance against current HP
-    const koText = result.kochance?.text ?? this._koChanceText(dmgRange, defCurHP);
+    // KO chance always computed against curHP (= post-chip HP when switching in)
+    // Never use result.kochance.text — it's computed by smogon against maxHP
+    const koText = this._koChanceText(dmgRange, defCurHP);
 
-    // Rolls display (16 damage rolls)
+    // Rolls display (16 damage rolls) — show pct of max HP for readability
     const rollPills = dmgRange.map((d, i) => {
       const pct = ((d / defMaxHP) * 100).toFixed(1);
       return `<span class="roll-pill">${d}<small style="opacity:.6"> (${pct}%)</small></span>`;
     }).join('');
 
-    // KO badge class
+    // KO badge color based on curHP, not maxHP
+    const minPctCur = ((minDmg / defCurHP) * 100);
+    const maxPctCur = ((maxDmg / defCurHP) * 100);
     let koClass = 'safe';
-    if (maxPct >= 100) koClass = 'ohko';
-    else if (parseFloat(minPct) >= 50) koClass = 'likely';
+    if (maxPctCur >= 100) koClass = 'ohko';
+    else if (minPctCur >= 50) koClass = 'likely';
 
     container.innerHTML = `
       <div class="result-main">
