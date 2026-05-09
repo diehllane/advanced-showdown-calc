@@ -388,6 +388,7 @@ h2, h3 { font-weight: 700; }
   z-index: 200;
   display: flex; align-items: center; justify-content: center;
 }
+.hidden { display: none !important; }
 .modal-overlay.hidden { display: none; }
 .modal {
   background: var(--bg-panel);
