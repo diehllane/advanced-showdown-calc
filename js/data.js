@@ -48,6 +48,32 @@ const GEN_VERSION_GROUP = {
   9: 'scarlet-violet',
 };
 
+// All version groups up to each gen — used for move lookup so we don't miss
+// moves that PokeAPI only records in an earlier game within the same gen
+// (e.g. Haze/Soft-Boiled in sun-moon but not ultra-sun-ultra-moon)
+const GEN_VERSION_GROUPS_CUMULATIVE = {
+  1: ['red-blue','yellow'],
+  2: ['red-blue','yellow','gold-silver','crystal'],
+  3: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen'],
+  4: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver'],
+  5: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver','black-white','black-2-white-2'],
+  6: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver','black-white','black-2-white-2',
+      'x-y','omega-ruby-alpha-sapphire'],
+  7: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver','black-white','black-2-white-2',
+      'x-y','omega-ruby-alpha-sapphire','sun-moon','ultra-sun-ultra-moon'],
+  8: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver','black-white','black-2-white-2',
+      'x-y','omega-ruby-alpha-sapphire','sun-moon','ultra-sun-ultra-moon','sword-shield'],
+  9: ['red-blue','yellow','gold-silver','crystal','ruby-sapphire','emerald','firered-leafgreen',
+      'diamond-pearl','platinum','heartgold-soulsilver','black-white','black-2-white-2',
+      'x-y','omega-ruby-alpha-sapphire','sun-moon','ultra-sun-ultra-moon','sword-shield',
+      'scarlet-violet'],
+};
+
 // Learn method display labels
 const LEARN_METHOD_LABELS = {
   'level-up':   'Level Up',
@@ -87,6 +113,41 @@ const COMMON_ITEMS = [
   'Z-Crystal', // generic placeholder shown in selector
 ];
 
+// Species slug overrides — PokeAPI uses different slugs for some Pokémon
+// than their display names or Showdown names would produce
+const SPECIES_SLUG_OVERRIDES = {
+  'mimikyu':         'mimikyu-disguised',
+  'wishiwashi':      'wishiwashi-solo',
+  'minior':          'minior-red-meteor',
+  'lycanroc':        'lycanroc-midday',
+  'oricorio':        'oricorio-baile',
+  'silvally':        'silvally',
+  'kommo-o':         'kommo-o',
+  'hakamo-o':        'hakamo-o',
+  'jangmo-o':        'jangmo-o',
+  'type-null':       'type-null',
+  'tapu-koko':       'tapu-koko',
+  'tapu-lele':       'tapu-lele',
+  'tapu-bulu':       'tapu-bulu',
+  'tapu-fini':       'tapu-fini',
+  'mr-mime':         'mr-mime',
+  'mime-jr':         'mime-jr',
+  'mr-rime':         'mr-rime',
+  'porygon-z':       'porygon-z',
+  'ho-oh':           'ho-oh',
+  'jangmo-o':        'jangmo-o',
+  'nidoran-f':       'nidoran-f',
+  'nidoran-m':       'nidoran-m',
+  'farfetchd':       'farfetchd',
+  'sirfetchd':       'sirfetchd',
+  'flabebe':         'flabebe',
+};
+
+function speciesSlug(name) {
+  const base = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/-$/, '');
+  return SPECIES_SLUG_OVERRIDES[base] ?? base;
+}
+
 // PokeAPI base
 const POKEAPI = 'https://pokeapi.co/api/v2';
 
@@ -108,7 +169,7 @@ async function fetchPokeAPI(endpoint) {
  */
 async function getMoveLearnMethods(speciesName, moveName, gen) {
   try {
-    const slug = speciesName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g,'-');
+    const slug = speciesSlug(speciesName);
     const moveSlug = moveName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g,'-');
     const data = await fetchPokeAPI(`/pokemon/${slug}`);
     const vg = GEN_VERSION_GROUP[gen] || GEN_VERSION_GROUP[7];
@@ -135,11 +196,13 @@ async function getMoveLearnMethods(speciesName, moveName, gen) {
  */
 async function getPokemonMoves(speciesName, gen) {
   try {
-    const slug = speciesName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g,'-');
+    const slug = speciesSlug(speciesName);
     const data = await fetchPokeAPI(`/pokemon/${slug}`);
-    const vg = GEN_VERSION_GROUP[gen] || GEN_VERSION_GROUP[7];
+    // Accept any move available in any version group up to this gen
+    // PokeAPI doesn't always re-document moves in later games within the same gen
+    const vgs = new Set(GEN_VERSION_GROUPS_CUMULATIVE[gen] || GEN_VERSION_GROUPS_CUMULATIVE[7]);
     return data.moves
-      .filter(m => m.version_group_details.some(d => d.version_group.name === vg))
+      .filter(m => m.version_group_details.some(d => vgs.has(d.version_group.name)))
       .map(m => m.move.name);
   } catch (e) {
     console.warn('getPokemonMoves:', e.message);
@@ -152,7 +215,7 @@ async function getPokemonMoves(speciesName, gen) {
  */
 async function getPokemonBaseData(speciesName) {
   try {
-    const slug = speciesName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g,'-');
+    const slug = speciesSlug(speciesName);
     const data = await fetchPokeAPI(`/pokemon/${slug}`);
     const stats = {};
     data.stats.forEach(s => {
