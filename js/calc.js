@@ -114,7 +114,7 @@ class CalcEngine {
 
     // Battle flags
     if (state.isFlashFireActive) opts.abilityOn = true;
-    if (state.isSwitchingOut) opts.isSwitchingOut = true;
+    // NOTE: isSwitchingOut belongs on field.defenderSide.isSwitching, not on the Pokemon object
 
     return new Pokemon(genObj, state.species, opts);
   }
@@ -151,6 +151,8 @@ class CalcEngine {
       isReflect:     _checked('def-reflect'),
       isLightScreen: _checked('def-lightscreen'),
       isAuroraVeil:  _checked('def-aurora'),
+      // Pursuit: isSwitching = 'out' on defenderSide is how smogon/calc doubles Pursuit BP
+      isSwitching:  defState?.isSwitchingOut ? 'out' : undefined,
       // Hazards only when switching in
       isSR:         defSwitchingIn && _checked('haz-sr'),
       spikes:       defSwitchingIn && _checked('haz-spikes') ? spikeLayers : 0,
