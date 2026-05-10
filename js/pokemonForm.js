@@ -132,7 +132,7 @@ class PokemonForm {
       `<option value="${i}" ${this.state.item===i?'selected':''}>${i}</option>`
     ).join('');
     return `
-      <div class="form-2col">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:start">
         <div class="form-row">
           <label>Nature</label>
           <select id="${this.role}-nature">${natureOpts}</select>
@@ -140,21 +140,22 @@ class PokemonForm {
         <div class="form-row">
           <label>Item</label>
           <select id="${this.role}-item">${itemOpts}</select>
+          <label class="check-label" style="margin-top:4px;font-size:11px">
+            <input type="checkbox" id="${this.role}-isUnburdenActive" ${this.state.isUnburdenActive?'checked':''}>
+            Consumed/Lost (Unburden)
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Ability</label>
+          <input type="text" id="${this.role}-ability" value="${s(this.state.ability)}"
+            placeholder="e.g. Rough Skin" list="${this.role}-ability-list" />
+          <datalist id="${this.role}-ability-list"></datalist>
         </div>
       </div>
     `;
   }
 
-  _renderAbilityRow() {
-    return `
-      <div class="form-row">
-        <label>Ability</label>
-        <input type="text" id="${this.role}-ability" value="${s(this.state.ability)}"
-          placeholder="e.g. Rough Skin" list="${this.role}-ability-list" />
-        <datalist id="${this.role}-ability-list"></datalist>
-      </div>
-    `;
-  }
+  _renderAbilityRow() { return ''; } // Merged into _renderNatureItemRow
 
   _renderStats() {
     const nat = NATURE_EFFECTS[this.state.nature];
@@ -244,7 +245,6 @@ class PokemonForm {
     const flags = [
       { id: 'isCriticalHit', label: 'Critical Hit' },
       { id: 'isFlashFireActive', label: 'Flash Fire' },
-      { id: 'isUnburdenActive', label: 'Consumed/Lost Item (Unburden)' },
       { id: 'isMicrobiomeActive', label: 'Microbiome (Gen9)' },
       { id: 'isSwitchingOut', label: 'Switching Out (Pursuit)' },
       { id: 'isSwitchingIn',  label: 'Switching In (apply hazards)' },
@@ -326,6 +326,13 @@ class PokemonForm {
     bind(`${r}-nature`, 'nature');
     bind(`${r}-item`, 'item');
     bind(`${r}-ability`, 'ability');
+
+    // Unburden checkbox lives under the Item selector — bind it here
+    const unburdenEl = get(`${r}-isUnburdenActive`);
+    if (unburdenEl) unburdenEl.addEventListener('change', () => {
+      this.state.isUnburdenActive = unburdenEl.checked;
+      window.appCalc?.scheduleCalc();
+    });
     bind(`${r}-status`, 'status');
 
     // IVs / EVs / Boosts
@@ -359,7 +366,7 @@ class PokemonForm {
     });
 
     // Flags
-    ['isCriticalHit','isFlashFireActive','isUnburdenActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
+    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
       const el = get(`${r}-${flag}`);
       if (el) el.addEventListener('change', () => {
         this.state[flag] = el.checked;
