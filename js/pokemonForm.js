@@ -28,6 +28,7 @@ class PokemonForm {
       // battle flags
       isCriticalHit: false,
       isFlashFireActive: false,
+      isUnburdenActive: false,
       isPumpedUp: false,
       isMicrobiomeActive: false,
       isMinimizeActive: false,
@@ -168,20 +169,18 @@ class PokemonForm {
       const calced = this.speciesData?.stats ? this._calcStatValue(i) : '–';
       const calcedCls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       return `
-        <div class="stat-row" style="display:grid;grid-template-columns:40px 46px 82px 60px 40px 44px;gap:4px;align-items:center">
+        <div class="stat-row" style="display:grid;grid-template-columns:36px 52px 52px 40px 1fr 44px 44px;gap:4px;align-items:center">
           <span class="stat-label ${cls}">${name}</span>
           <input type="number" id="${this.role}-iv-${i}" value="${this.state.ivs[i]}"
             min="0" max="31" class="stat-input iv-input" data-stat="${i}" />
-          <div style="display:flex;align-items:center;gap:2px">
-            <input type="number" id="${this.role}-ev-${i}" value="${this.state.evs[i]}"
-              min="0" max="252" class="stat-input ev-input" data-stat="${i}" style="width:46px" />
-            <input type="number" id="${this.role}-boost-${i > 0 ? i-1 : ''}"
-              ${i===0?'disabled':''}
-              value="${i > 0 ? this.state.boosts[i-1] : ''}"
-              min="-6" max="6" class="stat-input boost-input" data-stat="${i}"
-              placeholder="${i===0?'':'±'}" style="width:32px" />
-          </div>
-          <div class="stat-bar-wrap" style="max-width:60px">
+          <input type="number" id="${this.role}-ev-${i}" value="${this.state.evs[i]}"
+            min="0" max="252" class="stat-input ev-input" data-stat="${i}" />
+          <input type="number" id="${this.role}-boost-${i > 0 ? i-1 : ''}"
+            ${i===0?'disabled':''}
+            value="${i > 0 ? this.state.boosts[i-1] : ''}"
+            min="-6" max="6" class="stat-input boost-input" data-stat="${i}"
+            placeholder="${i===0?'':'±'}" />
+          <div class="stat-bar-wrap">
             <div class="stat-bar" style="width:${evPct}%"></div>
           </div>
           <span class="stat-label" style="text-align:right;color:var(--text-muted)">${base}</span>
@@ -191,10 +190,11 @@ class PokemonForm {
     });
     return `
       <div class="form-row" style="gap:6px">
-        <div style="display:grid;grid-template-columns:40px 46px 82px 60px 40px 44px;gap:4px;margin-bottom:3px;">
+        <div style="display:grid;grid-template-columns:36px 52px 52px 40px 1fr 44px 44px;gap:4px;margin-bottom:3px;">
           <span class="field-label">Stat</span>
           <span class="field-label">IV</span>
-          <span class="field-label">EV ±</span>
+          <span class="field-label">EV</span>
+          <span class="field-label">±</span>
           <span></span>
           <span class="field-label">Base</span>
           <span class="field-label">Total</span>
@@ -244,6 +244,7 @@ class PokemonForm {
     const flags = [
       { id: 'isCriticalHit', label: 'Critical Hit' },
       { id: 'isFlashFireActive', label: 'Flash Fire' },
+      { id: 'isUnburdenActive', label: 'Consumed/Lost Item (Unburden)' },
       { id: 'isMicrobiomeActive', label: 'Microbiome (Gen9)' },
       { id: 'isSwitchingOut', label: 'Switching Out (Pursuit)' },
       { id: 'isSwitchingIn',  label: 'Switching In (apply hazards)' },
@@ -358,7 +359,7 @@ class PokemonForm {
     });
 
     // Flags
-    ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
+    ['isCriticalHit','isFlashFireActive','isUnburdenActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
       const el = get(`${r}-${flag}`);
       if (el) el.addEventListener('change', () => {
         this.state[flag] = el.checked;

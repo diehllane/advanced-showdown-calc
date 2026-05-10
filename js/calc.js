@@ -114,6 +114,12 @@ class CalcEngine {
 
     // Battle flags
     if (state.isFlashFireActive) opts.abilityOn = true;
+    // Unburden: item is gone (clear it so calc doesn't apply item effects) and
+    // abilityOn = true tells smogon/calc to apply the Unburden speed doubling
+    if (state.isUnburdenActive) {
+      delete opts.item;
+      opts.abilityOn = true;
+    }
     // NOTE: isSwitchingOut belongs on field.defenderSide.isSwitching, not on the Pokemon object
 
     return new Pokemon(genObj, state.species, opts);
@@ -319,10 +325,15 @@ class CalcEngine {
     }
 
     // Step 4: held item modifiers
-    const item = state.item ?? '';
+    const item = state.isUnburdenActive ? '' : (state.item ?? '');
     if (item === 'Choice Scarf')  spd = Math.floor(spd * 1.5);
     if (item === 'Iron Ball' || item === 'Macho Brace') spd = Math.floor(spd * 0.5);
     if (item === 'Quick Powder' && (state.species ?? '').toLowerCase() === 'ditto') spd = Math.floor(spd * 2);
+
+    // Unburden: doubles speed when item was consumed/lost (item cleared above, ×2 applied here)
+    if (state.isUnburdenActive && (state.ability ?? '').toLowerCase() === 'unburden') {
+      spd = spd * 2;
+    }
 
     // Step 5: status (paralysis halves speed in Gen 7+, 1/4 in earlier gens)
     if (state.status === 'Paralysis') {
