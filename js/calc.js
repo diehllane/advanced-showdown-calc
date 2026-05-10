@@ -58,16 +58,22 @@ class CalcEngine {
         ? Math.floor(defMaxHP * defStateCalc.curHP / 100)
         : defMaxHP;
 
-      // Apply hazard chip for switching-in and reduce our tracked curHP
-      // Pass the actual form reference — atkState may be either panel depending on who pressed Use
-      const atkForm = activeRole === 'attacker' ? window.attackerForm : window.defenderForm;
-      const defForm = activeRole === 'attacker' ? window.defenderForm : window.attackerForm;
+      // Hazard prefix tracks which physical panel the pokemon is on (left=att, right=haz),
+      // independent of which panel pressed Use. Form reference tracks the same.
+      const leftForm  = window.attackerForm;
+      const rightForm = window.defenderForm;
+      const atkIsLeft = activeRole === 'attacker';
+      const atkForm   = atkIsLeft ? leftForm : rightForm;
+      const defForm   = atkIsLeft ? rightForm : leftForm;
+      const atkPrefix = atkIsLeft ? 'att' : 'haz';
+      const defPrefix = atkIsLeft ? 'haz' : 'att';
+
       if (atkState.isSwitchingIn) {
-        const chip = this._calcHazardChip(attacker, atkMaxHP, 'att', atkForm);
+        const chip = this._calcHazardChip(attacker, atkMaxHP, atkPrefix, atkForm);
         atkCurHP = Math.max(1, atkCurHP - chip);
       }
       if (defStateCalc.isSwitchingIn) {
-        const chip = this._calcHazardChip(defender, defMaxHP, 'haz', defForm);
+        const chip = this._calcHazardChip(defender, defMaxHP, defPrefix, defForm);
         defCurHP = Math.max(1, defCurHP - chip);
       }
 
