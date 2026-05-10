@@ -304,6 +304,7 @@ async function loadPokemonModal(role) {
       <div class="team-item load-pk-item" data-source="saved" data-id="${pk.id}" style="cursor:pointer">
         <div class="team-item-name">${esc(pk.nickname || pk.species)}</div>
         <div class="team-item-meta">${esc(pk.species)} · ${pk.owner === 'mine' ? '🟢 Mine' : '🔴 Opponent'}</div>
+        <div class="team-item-meta" style="color:var(--text-dim)">${esc(pk.data?.nature || '—')} · ${esc(pk.data?.item || 'No Item')}</div>
       </div>
     `).join('');
   }
@@ -314,6 +315,7 @@ async function loadPokemonModal(role) {
       <div class="team-item load-pk-item" data-source="team" data-idx="${idx}" style="cursor:pointer">
         <div class="team-item-name">${esc(pk.nickname)}</div>
         <div class="team-item-meta">${esc(pk.species)} · ${pk._teamOwner === 'mine' ? '🟢' : '🔴'} ${esc(pk._teamName)}</div>
+        <div class="team-item-meta" style="color:var(--text-dim)">${esc(pk.data?.nature || '—')} · ${esc(pk.data?.item || 'No Item')}</div>
       </div>
     `).join('');
   }

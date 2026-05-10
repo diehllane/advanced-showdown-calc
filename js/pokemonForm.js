@@ -169,7 +169,7 @@ class PokemonForm {
       const calced = this.speciesData?.stats ? this._calcStatValue(i) : '–';
       const calcedCls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       return `
-        <div class="stat-row" style="display:grid;grid-template-columns:36px 52px 52px 40px 1fr 44px 44px;gap:4px;align-items:center">
+        <div class="stat-row" style="display:grid;grid-template-columns:36px 52px 72px 58px 1fr 44px 44px;gap:4px;align-items:center">
           <span class="stat-label ${cls}">${name}</span>
           <input type="number" id="${this.role}-iv-${i}" value="${this.state.ivs[i]}"
             min="0" max="31" class="stat-input iv-input" data-stat="${i}" />
@@ -190,7 +190,7 @@ class PokemonForm {
     });
     return `
       <div class="form-row" style="gap:6px">
-        <div style="display:grid;grid-template-columns:36px 52px 52px 40px 1fr 44px 44px;gap:4px;margin-bottom:3px;">
+        <div style="display:grid;grid-template-columns:36px 52px 72px 58px 1fr 44px 44px;gap:4px;margin-bottom:3px;">
           <span class="field-label">Stat</span>
           <span class="field-label">IV</span>
           <span class="field-label">EV</span>
