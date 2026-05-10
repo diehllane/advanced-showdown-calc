@@ -162,40 +162,62 @@ class PokemonForm {
       const isReduceStat = nat && nat[1] === i;
       const cls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       const base = this.speciesData?.stats ? this._baseStatForIndex(i) : '–';
-      // EV bar width
+      // EV bar width — capped shorter so there's room for the calced stat
       const evPct = Math.round((this.state.evs[i] / 252) * 100);
+      // Computed final stat value
+      const calced = this.speciesData?.stats ? this._calcStatValue(i) : '–';
+      const calcedCls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       return `
-        <div class="stat-row">
+        <div class="stat-row" style="display:grid;grid-template-columns:40px 46px 82px 60px 40px 44px;gap:4px;align-items:center">
           <span class="stat-label ${cls}">${name}</span>
           <input type="number" id="${this.role}-iv-${i}" value="${this.state.ivs[i]}"
             min="0" max="31" class="stat-input iv-input" data-stat="${i}" />
-          <input type="number" id="${this.role}-ev-${i}" value="${this.state.evs[i]}"
-            min="0" max="252" class="stat-input ev-input" data-stat="${i}" />
-          <div class="stat-bar-wrap">
+          <div style="display:flex;align-items:center;gap:2px">
+            <input type="number" id="${this.role}-ev-${i}" value="${this.state.evs[i]}"
+              min="0" max="252" class="stat-input ev-input" data-stat="${i}" style="width:46px" />
+            <input type="number" id="${this.role}-boost-${i > 0 ? i-1 : ''}"
+              ${i===0?'disabled':''}
+              value="${i > 0 ? this.state.boosts[i-1] : ''}"
+              min="-6" max="6" class="stat-input boost-input" data-stat="${i}"
+              placeholder="${i===0?'':'±'}" style="width:32px" />
+          </div>
+          <div class="stat-bar-wrap" style="max-width:60px">
             <div class="stat-bar" style="width:${evPct}%"></div>
           </div>
           <span class="stat-label" style="text-align:right;color:var(--text-muted)">${base}</span>
-          <input type="number" id="${this.role}-boost-${i > 0 ? i-1 : ''}" 
-            ${i===0?'disabled':''} 
-            value="${i > 0 ? this.state.boosts[i-1] : ''}"
-            min="-6" max="6" class="stat-input boost-input" data-stat="${i}"
-            placeholder="${i===0?'HP':'+/-'}" />
+          <span class="stat-label ${calcedCls}" style="text-align:right;font-weight:600">${calced}</span>
         </div>
       `;
     });
     return `
       <div class="form-row" style="gap:6px">
-        <div style="display:grid;grid-template-columns:40px 64px 64px 1fr 50px 58px;gap:4px;margin-bottom:3px;">
+        <div style="display:grid;grid-template-columns:40px 46px 82px 60px 40px 44px;gap:4px;margin-bottom:3px;">
           <span class="field-label">Stat</span>
           <span class="field-label">IV</span>
-          <span class="field-label">EV</span>
+          <span class="field-label">EV ±</span>
           <span></span>
           <span class="field-label">Base</span>
-          <span class="field-label">±</span>
+          <span class="field-label">Total</span>
         </div>
         ${rows.join('')}
       </div>
     `;
+  }
+
+  _calcStatValue(statIdx) {
+    const base = this._baseStatForIndex(statIdx);
+    if (base === '–' || base === 0) return '–';
+    const iv  = this.state.ivs?.[statIdx] ?? 31;
+    const ev  = this.state.evs?.[statIdx] ?? 0;
+    const lvl = this.state.level ?? 100;
+    const nat = NATURE_EFFECTS[this.state.nature];
+    if (statIdx === 0) {
+      // HP formula
+      return Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
+    }
+    const natMod = nat && nat[0] === statIdx ? 1.1
+                 : nat && nat[1] === statIdx ? 0.9 : 1;
+    return Math.floor(Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
   }
 
   _baseStatForIndex(i) {
@@ -368,8 +390,10 @@ class PokemonForm {
         window.appState[`${this.role}ActiveMove`] = moveSlug;
         window.appCalc?.scheduleCalc();
         // Show learn method and type coverage
+        // The move's target is whichever panel is NOT the attacker
+        const defForm = this.role === 'attacker' ? window.defenderForm : window.attackerForm;
         window.appCalc?.showLearnMethod(this.state.species, moveSlug, this.currentGen);
-        window.appCalc?.showMoveTypeCoverage(moveSlug, window.defenderForm?.getState());
+        window.appCalc?.showMoveTypeCoverage(moveSlug, defForm?.getState(), defForm);
       });
     });
   }

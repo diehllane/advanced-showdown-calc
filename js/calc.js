@@ -390,9 +390,12 @@ class CalcEngine {
     return 'Does not KO in 2 hits';
   }
 
-  showMoveTypeCoverage(moveSlug, defState) {
+  showMoveTypeCoverage(moveSlug, defState, defForm) {
     const el = document.getElementById('move-type-coverage');
     if (!el || !moveSlug || !defState?.species) { if (el) el.innerHTML = ''; return; }
+
+    // defForm is the form whose Pokémon is being attacked (may be left or right panel)
+    const targetForm = defForm ?? window.defenderForm;
 
     // Type chart: attacking type -> array of [defending type, multiplier]
     const TYPE_CHART = {
@@ -427,8 +430,8 @@ class CalcEngine {
       const capType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
       const chart = TYPE_CHART[capType] || {};
 
-      // Get defender types from speciesData on the defender form
-      const defSpeciesData = window.defenderForm?.speciesData;
+      // Get defender types from the target panel's speciesData
+      const defSpeciesData = targetForm?.speciesData;
       const defTypes = defSpeciesData?.types || [];
       if (!defTypes.length) { el.innerHTML = ''; return; }
 

@@ -97,7 +97,8 @@ const COMMON_ITEMS = [
   'Rocky Helmet','Assault Vest',
   'Eviolite','Thick Club','Deep Sea Tooth','Deep Sea Scale',
   'Light Ball','Soul Dew',
-  'Lum Berry','Sitrus Berry','Salac Berry','Petaya Berry',
+  'Lum Berry','Sitrus Berry','Salac Berry','Petaya Berry','Liechi Berry',
+  'Apicot Berry','Ganlon Berry','Lansat Berry','Starf Berry','Micle Berry',
   'Weakness Policy','Safety Goggles',
   'Air Balloon','Red Card',
   'Focus Sash','Focus Band',
@@ -109,7 +110,16 @@ const COMMON_ITEMS = [
   'Mystic Water','Charcoal','Miracle Seed','Magnet','Never-Melt Ice',
   'Spell Tag','TwistedSpoon','Sharp Beak','Silvery','Hard Stone',
   'Dragon Fang','Poison Barb','Silk Scarf','Black Belt','Metal Coat',
+  // Speed-modifying items
+  'Iron Ball','Macho Brace','Power Weight','Power Bracer','Power Belt',
+  'Power Lens','Power Band','Power Anklet',
+  'Quick Powder',
+  // Accuracy/evasion
+  'Bright Powder','Lax Incense',
+  // Gen 1–2 items
+  'Pink Bow','Polkadot Bow','Stick',
   'Metronome',
+  'Booster Energy','Loaded Dice',
   'Z-Crystal', // generic placeholder shown in selector
 ];
 

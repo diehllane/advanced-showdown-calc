@@ -266,33 +266,78 @@ async function savePokemon(role) {
 
 async function loadPokemonModal(role) {
   let saved = [];
+  let teamPokemon = [];
+
   try {
     saved = await SB.getPokemon({ gen: window.appState.currentGen });
   } catch(e) {}
 
-  if (!saved.length) {
-    showToast('No saved Pokémon for this generation', 'error');
+  // Also collect all Pokémon from teams (any gen — teams store full state)
+  try {
+    const allTeams = await SB.getTeams();
+    allTeams.forEach(team => {
+      (team.pokemon || []).forEach((slot, idx) => {
+        if (!slot?.species) return;
+        teamPokemon.push({
+          _source: 'team',
+          _teamName: team.name,
+          _teamOwner: team.owner,
+          species: slot.species,
+          nickname: slot.nickname || slot.species,
+          data: slot,
+        });
+      });
+    });
+  } catch(e) {}
+
+  if (!saved.length && !teamPokemon.length) {
+    showToast('No saved Pokémon found', 'error');
     return;
   }
 
-  const items = saved.map(pk => `
-    <div class="team-item load-pk-item" data-id="${pk.id}" style="cursor:pointer">
-      <div class="team-item-name">${esc(pk.nickname || pk.species)}</div>
-      <div class="team-item-meta">${esc(pk.species)} · ${pk.owner === 'mine' ? '🟢 Mine' : '🔴 Opponent'}</div>
-    </div>
-  `).join('');
+  // Build modal: saved_pokemon section then team slots section
+  let html = '';
 
-  openModal('Load Pokémon', `<div class="team-list">${items}</div>`);
+  if (saved.length) {
+    html += `<div class="field-label" style="margin-bottom:6px;color:var(--text-dim)">Saved Pokémon</div>`;
+    html += saved.map(pk => `
+      <div class="team-item load-pk-item" data-source="saved" data-id="${pk.id}" style="cursor:pointer">
+        <div class="team-item-name">${esc(pk.nickname || pk.species)}</div>
+        <div class="team-item-meta">${esc(pk.species)} · ${pk.owner === 'mine' ? '🟢 Mine' : '🔴 Opponent'}</div>
+      </div>
+    `).join('');
+  }
+
+  if (teamPokemon.length) {
+    html += `<div class="field-label" style="margin:12px 0 6px;color:var(--text-dim)">From Teams</div>`;
+    html += teamPokemon.map((pk, idx) => `
+      <div class="team-item load-pk-item" data-source="team" data-idx="${idx}" style="cursor:pointer">
+        <div class="team-item-name">${esc(pk.nickname)}</div>
+        <div class="team-item-meta">${esc(pk.species)} · ${pk._teamOwner === 'mine' ? '🟢' : '🔴'} ${esc(pk._teamName)}</div>
+      </div>
+    `).join('');
+  }
+
+  openModal('Load Pokémon', `<div class="team-list">${html}</div>`);
 
   document.querySelectorAll('.load-pk-item').forEach(item => {
     item.addEventListener('click', () => {
-      const id = parseInt(item.dataset.id);
-      const pk = saved.find(p => p.id === id);
-      if (!pk) return;
       const form = role === 'attacker' ? window.attackerForm : window.defenderForm;
-      form.setState(pk.data);
-      closeModal();
-      showToast(`${pk.nickname || pk.species} loaded!`, 'success');
+      if (item.dataset.source === 'saved') {
+        const id = parseInt(item.dataset.id);
+        const pk = saved.find(p => p.id === id);
+        if (!pk) return;
+        form.setState(pk.data);
+        closeModal();
+        showToast(`${pk.nickname || pk.species} loaded!`, 'success');
+      } else {
+        const idx = parseInt(item.dataset.idx);
+        const pk = teamPokemon[idx];
+        if (!pk) return;
+        form.setState(pk.data);
+        closeModal();
+        showToast(`${pk.nickname} loaded!`, 'success');
+      }
     });
   });
 }
