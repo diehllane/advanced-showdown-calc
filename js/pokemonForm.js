@@ -260,8 +260,18 @@ class PokemonForm {
             </label>
           `).join('')}
           <div class="form-row" style="margin-top:4px">
-            <label>Current HP %</label>
-            <input type="number" id="${this.role}-curhp" value="${this.state.curHP ?? 100}" min="1" max="100" />
+            <label>Current HP</label>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="${this.role}-curhp" value="${this.state.curHP ?? 100}" min="1" max="100" style="width:58px" />
+              <span style="color:var(--text-muted);font-size:12px;font-family:var(--font-mono)">%</span>
+              ${(() => {
+                const maxHP = this._calcStatValue(0);
+                if (maxHP === '–') return '';
+                const pct = this.state.curHP ?? 100;
+                const actual = Math.floor(maxHP * pct / 100);
+                return `<span id="${this.role}-curhp-display" style="color:var(--text-dim);font-size:12px;font-family:var(--font-mono)">${actual} / ${maxHP} HP</span>`;
+              })()}
+            </div>
           </div>
         </div>
       </div>
@@ -360,10 +370,22 @@ class PokemonForm {
 
     // Current HP
     const curHPEl = get(`${r}-curhp`);
-    if (curHPEl) curHPEl.addEventListener('change', () => {
-      this.state.curHP = parseInt(curHPEl.value) || 100;
-      window.appCalc?.scheduleCalc();
-    });
+    if (curHPEl) {
+      const updateHPDisplay = () => {
+        this.state.curHP = parseInt(curHPEl.value) || 100;
+        const displayEl = get(`${r}-curhp-display`);
+        if (displayEl) {
+          const maxHP = this._calcStatValue(0);
+          if (maxHP !== '–') {
+            const actual = Math.floor(maxHP * this.state.curHP / 100);
+            displayEl.textContent = `${actual} / ${maxHP} HP`;
+          }
+        }
+        window.appCalc?.scheduleCalc();
+      };
+      curHPEl.addEventListener('change', updateHPDisplay);
+      curHPEl.addEventListener('input', updateHPDisplay);
+    }
 
     // Flags
     ['isCriticalHit','isFlashFireActive','isMicrobiomeActive','isSwitchingOut','isSwitchingIn'].forEach(flag => {
