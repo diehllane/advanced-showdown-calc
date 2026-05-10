@@ -249,8 +249,10 @@ class CalcEngine {
       const rightForm = window.defenderForm;
       const leftState  = activeRole === 'attacker' ? attState : defState;
       const rightState = activeRole === 'attacker' ? defState : attState;
-      const leftSpd0  = attacker.stats?.spe ?? this._calcSpeed(leftState,  leftForm);
-      const rightSpd0 = defender.stats?.spe ?? this._calcSpeed(rightState, rightForm);
+      // Always use _calcSpeed — attacker.stats.spe is the raw stat and does not
+      // include held item modifiers (Choice Scarf, Iron Ball, etc.).
+      const leftSpd0  = this._calcSpeed(leftState,  leftForm);
+      const rightSpd0 = this._calcSpeed(rightState, rightForm);
 
       const leftTailwind  = _checked('att-tailwind');
       const rightTailwind = _checked('def-tailwind');
