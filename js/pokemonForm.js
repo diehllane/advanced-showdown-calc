@@ -262,7 +262,7 @@ class PokemonForm {
           <div class="form-row" style="margin-top:4px">
             <label>Current HP</label>
             <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="${this.role}-curhp" value="${this.state.curHP ?? 100}" min="1" max="100" style="width:58px" />
+              <input type="number" id="${this.role}-curhp" value="${this.state.curHP ?? 100}" min="1" max="100" style="width:76px" />
               <span style="color:var(--text-muted);font-size:12px;font-family:var(--font-mono)">%</span>
               ${(() => {
                 const maxHP = this._calcStatValue(0);
