@@ -59,12 +59,15 @@ class CalcEngine {
         : defMaxHP;
 
       // Apply hazard chip for switching-in and reduce our tracked curHP
+      // Pass the actual form reference — atkState may be either panel depending on who pressed Use
+      const atkForm = activeRole === 'attacker' ? window.attackerForm : window.defenderForm;
+      const defForm = activeRole === 'attacker' ? window.defenderForm : window.attackerForm;
       if (atkState.isSwitchingIn) {
-        const chip = this._calcHazardChip(attacker, atkMaxHP, 'att');
+        const chip = this._calcHazardChip(attacker, atkMaxHP, 'att', atkForm);
         atkCurHP = Math.max(1, atkCurHP - chip);
       }
       if (defStateCalc.isSwitchingIn) {
-        const chip = this._calcHazardChip(defender, defMaxHP, 'haz');
+        const chip = this._calcHazardChip(defender, defMaxHP, 'haz', defForm);
         defCurHP = Math.max(1, defCurHP - chip);
       }
 
@@ -344,10 +347,11 @@ class CalcEngine {
     return spd;
   }
 
-  _calcHazardChip(pokemon, maxHP, prefix) {
+  _calcHazardChip(pokemon, maxHP, prefix, form) {
     // Returns HP lost on switch-in from hazards (integer)
-    // prefix = 'att' for left-side hazards, 'haz' for right-side hazards
-    const form  = prefix === 'att' ? window.attackerForm : window.defenderForm;
+    // prefix = 'att' for left-side hazard IDs, 'haz' for right-side hazard IDs
+    // form is the actual PokemonForm instance for the Pokémon taking chip
+    if (!form) form = prefix === 'att' ? window.attackerForm : window.defenderForm;
     const types = form?.speciesData?.types ?? [];
     const state = form?.getState() ?? {};
     const item  = state.item ?? '';
