@@ -2,6 +2,37 @@
 // Wraps @smogon/calc (window.calc from the UMD build) to perform damage
 // calculations and update the results panel.
 
+// ── PVE Map Boost Definitions ─────────────────────────────────────────────────
+// Multipliers applied to the computed stat value before passing to smogon/calc.
+// Keys match the <select id="map-boost-select"> option values.
+// 'left' = player side (Left panel), 'right' = wild side (Right panel).
+// Stats: { hp, atk, def, spa, spd, spe } — omitted keys = no boost (1×).
+const MAP_BOOSTS = {
+  'none': {
+    left:  {},
+    right: {},
+  },
+  'ancient-dungeon': {
+    // All stats except Speed boosted 1.65× for both sides
+    left:  { atk: 1.65, def: 1.65, spa: 1.65, spd: 1.65 },
+    right: { atk: 1.65, def: 1.65, spa: 1.65, spd: 1.65 },
+  },
+  'battle-zone': {
+    // All stats except Speed boosted 1.5× for both sides
+    left:  { atk: 1.5, def: 1.5, spa: 1.5, spd: 1.5 },
+    right: { atk: 1.5, def: 1.5, spa: 1.5, spd: 1.5 },
+  },
+  'legendary': {
+    // Player (left) gets large offensive/defensive buffs
+    left:  { atk: 2.5, def: 2.0, spa: 2.5, spd: 2.0, spe: 2.0 },
+    // Wild (right) gets HP-heavy defensive buffs with moderate offensive
+    right: { hp: 2.0, atk: 1.33, def: 2.0, spa: 1.33, spd: 2.0 },
+  },
+};
+
+// Maps that boost non-HP stats (used to gate Elite non-HP boost suppression)
+const STAT_BOOSTING_MAPS = new Set(['ancient-dungeon', 'battle-zone', 'legendary']);
+
 class CalcEngine {
   constructor() {
     this._calcTimer = null;
@@ -40,11 +71,25 @@ class CalcEngine {
       const defStateCalc = activeRole === 'attacker' ? defState : attState;
       const dirLabel = activeRole === 'attacker' ? 'Left → Right' : 'Right → Left';
 
+      // Map boost / Elite context — always Left = player, Right = wild
+      const mapBoostKey = document.getElementById('map-boost-select')?.value ?? 'none';
+      const isEliteRight = document.getElementById('right-elite')?.checked ?? false;
+
       const genObj = Generations.get(gen);
 
-      // Build Pokémon objects
-      const attacker = this._buildPokemon(genObj, atkState);
-      const defender = this._buildPokemon(genObj, defStateCalc);
+      // Build Pokémon objects — Left panel always gets 'left' boosts, Right always 'right'
+      const leftForm  = window.attackerForm;
+      const rightForm = window.defenderForm;
+
+      // attacker/defender depend on who pressed Use, but stat boosts are positional (L/R)
+      const atkIsLeft = activeRole === 'attacker';
+      const atkBoostSide = atkIsLeft ? 'left' : 'right';
+      const defBoostSide = atkIsLeft ? 'right' : 'left';
+      const atkIsElite  = atkIsLeft ? false : isEliteRight;
+      const defIsElite  = atkIsLeft ? isEliteRight : false;
+
+      const attacker = this._buildPokemon(genObj, atkState, mapBoostKey, atkBoostSide, atkIsElite, atkIsLeft ? leftForm : rightForm);
+      const defender = this._buildPokemon(genObj, defStateCalc, mapBoostKey, defBoostSide, defIsElite, atkIsLeft ? rightForm : leftForm);
 
       // Track effective current HP in our own variables — don't rely on
       // defender.curHP persisting through calculate() on the smogon object.
@@ -60,9 +105,6 @@ class CalcEngine {
 
       // Hazard prefix tracks which physical panel the pokemon is on (left=att, right=haz),
       // independent of which panel pressed Use. Form reference tracks the same.
-      const leftForm  = window.attackerForm;
-      const rightForm = window.defenderForm;
-      const atkIsLeft = activeRole === 'attacker';
       const atkForm   = atkIsLeft ? leftForm : rightForm;
       const defForm   = atkIsLeft ? rightForm : leftForm;
       const atkPrefix = atkIsLeft ? 'att' : 'haz';
@@ -91,7 +133,7 @@ class CalcEngine {
 
       const calcResult = calculate(genObj, attacker, defender, move, field);
 
-      this._renderResult(result, calcResult, attacker, defender, atkState, defStateCalc, gen, dirLabel, defCurHP);
+      this._renderResult(result, calcResult, attacker, defender, atkState, defStateCalc, gen, dirLabel, defCurHP, mapBoostKey, isEliteRight);
     } catch (e) {
       result.innerHTML = `<div class="result-placeholder" style="color:var(--accent3)">
         Calc error: ${e.message}<br><small>Check species names and move names match the selected generation.</small>
@@ -100,10 +142,64 @@ class CalcEngine {
     }
   }
 
-  _buildPokemon(genObj, state) {
+  // ── Stat boost helpers ────────────────────────────────────────────────────
+
+  /**
+   * Returns the map stat multipliers for a given side ('left'|'right') and map key.
+   * Merges Elite on top if applicable.
+   *
+   * Elite rules (right side only):
+   *   - HP always gets ×1.3 on top of any map HP multiplier.
+   *   - Non-HP stats get ×1.3 ONLY if the map does NOT already boost stats
+   *     (i.e. not Ancient Dungeon, Battle Zone, or Legendary Maps).
+   */
+  _resolveStatMultipliers(mapKey, boostSide, isElite) {
+    const mapMults = MAP_BOOSTS[mapKey]?.[boostSide] ?? {};
+    const mults = { ...mapMults };
+
+    if (isElite) {
+      const mapBoostsStats = STAT_BOOSTING_MAPS.has(mapKey);
+      // HP always boosted by Elite
+      mults.hp = (mults.hp ?? 1) * 1.3;
+      // Non-HP only boosted by Elite when not already in a stat-boosting map
+      if (!mapBoostsStats) {
+        for (const stat of ['atk', 'def', 'spa', 'spd', 'spe']) {
+          mults[stat] = (mults[stat] ?? 1) * 1.3;
+        }
+      }
+    }
+
+    return mults;
+  }
+
+  /**
+   * Compute a single boosted stat value.
+   * We calculate the raw stat from base/IV/EV/nature/level, apply the multiplier,
+   * then back-solve the EV that would produce that same value so smogon/calc's
+   * internal stat engine arrives at the right number. This is cleaner than
+   * overrides (which are undocumented in v0.9.0) and avoids floating-point drift
+   * from post-multiply on the damage rolls.
+   *
+   * Actually, the cleanest approach for v0.9.0 is to pass the final boosted value
+   * via the `overrides` option on the Pokemon constructor — it IS supported as an
+   * undocumented internal property in the calc engine. We'll use it directly.
+   *
+   * stat:  'hp'|'atk'|'def'|'spa'|'spd'|'spe'
+   * base:  base stat integer
+   * iv/ev: integers
+   * lvl:   integer
+   * natMod: 1.1 | 0.9 | 1.0
+   */
+  _computeRawStat(statKey, base, iv, ev, lvl, natMod) {
+    if (statKey === 'hp') {
+      return Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
+    }
+    return Math.floor(Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
+  }
+
+  _buildPokemon(genObj, state, mapKey, boostSide, isElite, form) {
     const { Pokemon } = window.calc;
 
-    // Map stat arrays to smogon format
     const [hp, atk, def, spa, spd, spe] = state.evs;
     const [hpIV, atkIV, defIV, spaIV, spdIV, speIV] = state.ivs;
     const [atkB, defB, spaB, spdB, speB] = state.boosts;
@@ -123,13 +219,51 @@ class CalcEngine {
 
     // Battle flags
     if (state.isFlashFireActive) opts.abilityOn = true;
-    // Unburden: item is gone (clear it so calc doesn't apply item effects) and
-    // abilityOn = true tells smogon/calc to apply the Unburden speed doubling
     if (state.isUnburdenActive) {
       delete opts.item;
       opts.abilityOn = true;
     }
-    // NOTE: isSwitchingOut belongs on field.defenderSide.isSwitching, not on the Pokemon object
+
+    // ── Apply PVE map / Elite stat multipliers via overrides ────────────────
+    const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
+    const hasMults = Object.keys(mults).length > 0;
+
+    if (hasMults && form?.speciesData?.stats) {
+      const baseStats = form.speciesData.stats;
+      const nat = NATURE_EFFECTS[state.nature];
+      const lvl = state.level ?? 100;
+
+      // Map stat key to [baseStatKey, ivIndex, evIndex, natStatIndex]
+      // natStatIndex: index in STAT_NAMES for nature effect lookup (0=hp,1=atk,2=def,3=spa,4=spd,5=spe)
+      const STAT_MAP = {
+        hp:  { baseKey: 'hp',              iv: hpIV,  ev: hp,  natIdx: 0 },
+        atk: { baseKey: 'attack',          iv: atkIV, ev: atk, natIdx: 1 },
+        def: { baseKey: 'defense',         iv: defIV, ev: def, natIdx: 2 },
+        spa: { baseKey: 'special-attack',  iv: spaIV, ev: spa, natIdx: 3 },
+        spd: { baseKey: 'special-defense', iv: spdIV, ev: spd, natIdx: 4 },
+        spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 5 },
+      };
+
+      const overrides = {};
+
+      for (const [statKey, mult] of Object.entries(mults)) {
+        if (mult === 1) continue;
+        const sm = STAT_MAP[statKey];
+        if (!sm) continue;
+        const base = baseStats[sm.baseKey];
+        if (!base) continue;
+
+        const natMod = nat && nat[0] === sm.natIdx ? 1.1
+                     : nat && nat[1] === sm.natIdx ? 0.9 : 1.0;
+
+        const rawStat = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
+        overrides[statKey] = Math.floor(rawStat * mult);
+      }
+
+      if (Object.keys(overrides).length > 0) {
+        opts.overrides = overrides;
+      }
+    }
 
     return new Pokemon(genObj, state.species, opts);
   }
@@ -140,9 +274,6 @@ class CalcEngine {
     const weather = _fieldVal('weather-group');
     const terrain = _fieldVal('terrain-group');
 
-    // Hazards (SR, Spikes, T-Spikes, Sticky Web) only feed into the smogon Side
-    // when the Pokémon on that side is switching in — otherwise they don't affect
-    // the damage calc or desc, and would cause spurious "after Stealth Rock" text.
     const attSwitchingIn = atkState?.isSwitchingIn ?? false;
     const defSwitchingIn = defState?.isSwitchingIn ?? false;
 
@@ -153,7 +284,6 @@ class CalcEngine {
       isReflect:     _checked('att-reflect'),
       isLightScreen: _checked('att-lightscreen'),
       isAuroraVeil:  _checked('att-aurora'),
-      // Hazards only when switching in
       isSR:         attSwitchingIn && _checked('att-sr'),
       spikes:       attSwitchingIn && _checked('att-spikes') ? attSpikeLayers : 0,
       toxicSpikes:  attSwitchingIn && _checked('att-tspikes') ? 1 : 0,
@@ -166,9 +296,7 @@ class CalcEngine {
       isReflect:     _checked('def-reflect'),
       isLightScreen: _checked('def-lightscreen'),
       isAuroraVeil:  _checked('def-aurora'),
-      // Pursuit: isSwitching = 'out' on defenderSide is how smogon/calc doubles Pursuit BP
       isSwitching:  defState?.isSwitchingOut ? 'out' : undefined,
-      // Hazards only when switching in
       isSR:         defSwitchingIn && _checked('haz-sr'),
       spikes:       defSwitchingIn && _checked('haz-spikes') ? spikeLayers : 0,
       toxicSpikes:  defSwitchingIn && _checked('haz-tspikes') ? 1 : 0,
@@ -185,7 +313,7 @@ class CalcEngine {
     });
   }
 
-  _renderResult(container, result, attacker, defender, attState, defState, gen, dirLabel, defCurHP) {
+  _renderResult(container, result, attacker, defender, attState, defState, gen, dirLabel, defCurHP, mapBoostKey, isEliteRight) {
     const dmgRange = result.damage;
     if (!dmgRange || !dmgRange.length) {
       container.innerHTML = `<div class="result-placeholder">No damage (move may not deal damage or data unavailable).</div>`;
@@ -195,37 +323,33 @@ class CalcEngine {
     const minDmg = Math.min(...dmgRange);
     const maxDmg = Math.max(...dmgRange);
     const defMaxHP = defender.maxHP();
-    // Use explicitly passed defCurHP — defender.curHP may not persist through calculate()
     defCurHP = defCurHP ?? defMaxHP;
 
-    // Percentages shown relative to max HP for context
     const minPct = ((minDmg / defMaxHP) * 100).toFixed(1);
     const maxPct = ((maxDmg / defMaxHP) * 100).toFixed(1);
 
-    // When switching in, we manually reduced defender.curHP before calculate().
-    // Smogon's kochance also internally models chip, so using both would double-count.
-    // Use our own _koChanceText against defCurHP when switching in (chip already applied).
-    // Use smogon's kochance when not switching in (more accurate for multi-hit scenarios).
     const isSwitchingIn = attState.isSwitchingIn || defState.isSwitchingIn;
     const koText = isSwitchingIn
       ? this._koChanceText(dmgRange, defCurHP)
       : (result.kochance?.text ?? this._koChanceText(dmgRange, defCurHP));
 
-    // Rolls display (16 damage rolls) — show pct of max HP for readability
-    const rollPills = dmgRange.map((d, i) => {
+    const rollPills = dmgRange.map((d) => {
       const pct = ((d / defMaxHP) * 100).toFixed(1);
       return `<span class="roll-pill">${d}<small style="opacity:.6"> (${pct}%)</small></span>`;
     }).join('');
 
-    // Badge color: derive from the KO text so green box and label always agree
     let koClass = 'safe';
     const koLower = koText.toLowerCase();
     if (koLower.includes('guaranteed ohko') || koLower.startsWith('ohko')) koClass = 'ohko';
     else if (koLower.includes('guaranteed 2hko') || koLower.includes('2hko')) koClass = 'likely';
 
+    // ── Map boost / Elite indicator labels ──────────────────────────────────
+    const mapLabel = this._buildMapBoostLabel(mapBoostKey, isEliteRight);
+
     container.innerHTML = `
       <div class="result-main">
         ${dirLabel ? `<div class="result-direction">${dirLabel}</div>` : ''}
+        ${mapLabel}
         ${attState.isSwitchingIn || defState.isSwitchingIn ? `<div class="switch-chip-note">⚠ Switching In: HP reduced by hazard chip before this roll</div>` : ''}
         <div class="result-range">${minDmg}–${maxDmg}</div>
         <div class="result-pct">(${minPct}% – ${maxPct}%)</div>
@@ -235,7 +359,6 @@ class CalcEngine {
           ${(() => {
             const isSwitchingIn = attState.isSwitchingIn || defState.isSwitchingIn;
             if (isSwitchingIn) {
-              // Build our own desc reflecting actual curHP, not smogon's internal full-HP calc
               const curHPPct = ((defCurHP / defMaxHP) * 100).toFixed(1);
               const smogonBase = result.desc ? result.desc().replace(/ -- .+$/, '') : '';
               return smogonBase + ` -- ${koText} (at ${curHPPct}% HP after hazards)`;
@@ -247,8 +370,24 @@ class CalcEngine {
       </div>
     `;
 
-    // Speed tier comparison
     this._renderSpeedTier(attacker, defender, attState, defState);
+  }
+
+  _buildMapBoostLabel(mapKey, isEliteRight) {
+    if (mapKey === 'none' && !isEliteRight) return '';
+
+    const MAP_NAMES = {
+      'none':            '',
+      'ancient-dungeon': 'Ancient Dungeon',
+      'battle-zone':     'Battle Zone',
+      'legendary':       'Legendary Maps',
+    };
+
+    const parts = [];
+    if (mapKey !== 'none') parts.push(`🗺 ${MAP_NAMES[mapKey]}`);
+    if (isEliteRight)       parts.push(`<span style="background:linear-gradient(135deg,#f5a623,#e07b20);color:#1a1a1a;padding:1px 6px;border-radius:3px;font-weight:700;font-size:10px;letter-spacing:.05em">ELITE</span> Right`);
+
+    return `<div style="font-size:11px;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${parts.join(' · ')}</div>`;
   }
 
   _renderSpeedTier(attacker, defender, attState, defState) {
@@ -256,30 +395,28 @@ class CalcEngine {
     if (!el) return;
 
     try {
-      // Use smogon/calc's computed stats directly — available after calculate()
-      // attState here is the state of whichever panel pressed Use (may be left or right)
-      // We need the original left/right forms to look up speciesData correctly
       const activeRole = window.appState?.activeMoveRole ?? 'attacker';
       const leftForm  = window.attackerForm;
       const rightForm = window.defenderForm;
       const leftState  = activeRole === 'attacker' ? attState : defState;
       const rightState = activeRole === 'attacker' ? defState : attState;
-      // Always use _calcSpeed — attacker.stats.spe is the raw stat and does not
-      // include held item modifiers (Choice Scarf, Iron Ball, etc.).
-      const leftSpd0  = this._calcSpeed(leftState,  leftForm);
-      const rightSpd0 = this._calcSpeed(rightState, rightForm);
+
+      const mapBoostKey  = document.getElementById('map-boost-select')?.value ?? 'none';
+      const isEliteRight = document.getElementById('right-elite')?.checked ?? false;
+
+      // Left panel always gets 'left' boosts, right always 'right'
+      const leftSpd0  = this._calcSpeed(leftState,  leftForm,  mapBoostKey, 'left',  false);
+      const rightSpd0 = this._calcSpeed(rightState, rightForm, mapBoostKey, 'right', isEliteRight);
 
       const leftTailwind  = _checked('att-tailwind');
       const rightTailwind = _checked('def-tailwind');
       const isTrickRoom   = _checked('field-trickroom');
-      const rightStickyWeb = _checked('haz-web');  // right side hazard
-      const leftStickyWeb  = _checked('att-web');  // left side hazard
+      const rightStickyWeb = _checked('haz-web');
+      const leftStickyWeb  = _checked('att-web');
       const gen           = window.appState?.currentGen ?? 7;
 
-      // Apply tailwind (×2) and Sticky Web (×0.75 in Gen 6+) per side
       let leftSpd  = leftTailwind  ? leftSpd0 * 2 : leftSpd0;
       let rightSpd = rightTailwind ? rightSpd0 * 2 : rightSpd0;
-      // Sticky Web slows whichever side it's on
       if (leftStickyWeb  && gen >= 6) leftSpd  = Math.floor(leftSpd  * 0.75);
       if (rightStickyWeb && gen >= 6) rightSpd = Math.floor(rightSpd * 0.75);
 
@@ -312,12 +449,10 @@ class CalcEngine {
     }
   }
 
-  _calcSpeed(state, form) {
-    // Step 1: base stat from PokeAPI species data
+  _calcSpeed(state, form, mapKey, boostSide, isElite) {
     const baseSpd = form?.speciesData?.stats?.speed ?? 0;
     if (!baseSpd) return 0;
 
-    // Step 2: stat value from EVs/IVs/nature/level (Gen 3+ formula)
     const iv  = state.ivs?.[5] ?? 31;
     const ev  = state.evs?.[5] ?? 0;
     const lvl = state.level ?? 50;
@@ -326,25 +461,27 @@ class CalcEngine {
                  : ['Brave','Relaxed','Quiet','Sassy'].includes(nat) ? 0.9 : 1;
     let spd = Math.floor(Math.floor((2 * baseSpd + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
 
-    // Step 3: stat stage boosts (index 4 = speed in boosts array [atk,def,spa,spd,spe])
+    // Apply PVE speed multiplier if any
+    const mults = this._resolveStatMultipliers(mapKey ?? 'none', boostSide ?? 'left', isElite ?? false);
+    if (mults.spe && mults.spe !== 1) {
+      spd = Math.floor(spd * mults.spe);
+    }
+
     const boost = state.boosts?.[4] ?? 0;
     if (boost !== 0) {
       const stageMult = boost > 0 ? (2 + boost) / 2 : 2 / (2 - boost);
       spd = Math.floor(spd * stageMult);
     }
 
-    // Step 4: held item modifiers
     const item = state.isUnburdenActive ? '' : (state.item ?? '');
     if (item === 'Choice Scarf')  spd = Math.floor(spd * 1.5);
     if (item === 'Iron Ball' || item === 'Macho Brace') spd = Math.floor(spd * 0.5);
     if (item === 'Quick Powder' && (state.species ?? '').toLowerCase() === 'ditto') spd = Math.floor(spd * 2);
 
-    // Unburden: doubles speed when item was consumed/lost (item cleared above, ×2 applied here)
     if (state.isUnburdenActive && (state.ability ?? '').toLowerCase() === 'unburden') {
       spd = spd * 2;
     }
 
-    // Step 5: status (paralysis halves speed in Gen 7+, 1/4 in earlier gens)
     if (state.status === 'Paralysis') {
       const gen = window.appState?.currentGen ?? 7;
       spd = Math.floor(spd * (gen >= 7 ? 0.5 : 0.25));
@@ -354,9 +491,6 @@ class CalcEngine {
   }
 
   _calcHazardChip(pokemon, maxHP, prefix, form) {
-    // Returns HP lost on switch-in from hazards (integer)
-    // prefix = 'att' for left-side hazard IDs, 'haz' for right-side hazard IDs
-    // form is the actual PokemonForm instance for the Pokémon taking chip
     if (!form) form = prefix === 'att' ? window.attackerForm : window.defenderForm;
     const types = form?.speciesData?.types ?? [];
     const state = form?.getState() ?? {};
@@ -366,8 +500,6 @@ class CalcEngine {
 
     let chip = 0;
 
-    // Stealth Rock: Rock-type effectiveness multiplier on 12.5% base
-    // Magic Guard immune; no type is fully immune to SR (0× doesn't exist for Rock attacking)
     if (_checked(`${prefix}-sr`) && !isMagicGuard) {
       const SR_CHART = {
         Normal:1, Fire:2, Water:0.5, Electric:1, Grass:0.5, Ice:2,
@@ -379,16 +511,12 @@ class CalcEngine {
       chip += Math.floor(maxHP * 0.125 * mult);
     }
 
-    // Spikes: 1/8, 1/6, 1/4 for 1/2/3 layers
-    // Immune: Flying-types, Levitate, Air Balloon, Magic Guard
-    // Iron Ball or Gravity grounds Flying (simple check — Gravity is a field condition)
     if (_checked(`${prefix}-spikes`) && !isMagicGuard) {
       const isFlying   = types.includes('Flying');
       const hasLevitate = ability === 'levitate';
       const hasAirBalloon = item === 'Air Balloon';
       const hasIronBall   = item === 'Iron Ball';
       const isGravity     = _checked('field-gravity');
-      // Grounded if: not Flying (or Iron Ball/Gravity negates Flying), no Levitate, no Air Balloon
       const ungrounded = (isFlying && !hasIronBall && !isGravity) || hasLevitate || hasAirBalloon;
       if (!ungrounded) {
         const layersEl = document.getElementById(`${prefix}-spikes-layers`);
@@ -415,10 +543,8 @@ class CalcEngine {
     const el = document.getElementById('move-type-coverage');
     if (!el || !moveSlug || !defState?.species) { if (el) el.innerHTML = ''; return; }
 
-    // defForm is the form whose Pokémon is being attacked (may be left or right panel)
     const targetForm = defForm ?? window.defenderForm;
 
-    // Type chart: attacking type -> array of [defending type, multiplier]
     const TYPE_CHART = {
       Normal:   { Ghost:0, Rock:0.5, Steel:0.5 },
       Fire:     { Fire:0.5, Water:0.5, Rock:0.5, Dragon:0.5, Grass:2, Ice:2, Bug:2, Steel:2 },
@@ -440,7 +566,6 @@ class CalcEngine {
       Fairy:    { Fire:0.5, Poison:0.5, Steel:0.5, Fighting:2, Dragon:2, Dark:2 },
     };
 
-    // Get move type — Hidden Power type comes from slug, not PokeAPI (which returns Normal)
     const moveApiSlug = moveSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const hpMatch = moveApiSlug.match(/^hidden-power-(.+)$/);
     const hpType = hpMatch ? hpMatch[1] : null;
@@ -451,7 +576,6 @@ class CalcEngine {
       const capType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
       const chart = TYPE_CHART[capType] || {};
 
-      // Get defender types from the target panel's speciesData
       const defSpeciesData = targetForm?.speciesData;
       const defTypes = defSpeciesData?.types || [];
       if (!defTypes.length) { el.innerHTML = ''; return; }
@@ -507,6 +631,16 @@ function _fieldVal(groupId) {
 function _checked(id) {
   return document.getElementById(id)?.checked ?? false;
 }
+
+// Wire up Map Boost controls to trigger recalc on change
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('map-boost-select')?.addEventListener('change', () => {
+    window.appCalc?.scheduleCalc();
+  });
+  document.getElementById('right-elite')?.addEventListener('change', () => {
+    window.appCalc?.scheduleCalc();
+  });
+});
 
 // Exposed globally
 window.appCalc = new CalcEngine();
