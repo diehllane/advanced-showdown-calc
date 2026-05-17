@@ -9,6 +9,86 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔</text></svg>" />
   <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* ── Map Boost tooltip ── */
+    .map-boost-label-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tooltip-anchor {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: help;
+    }
+    .tooltip-anchor .tooltip-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent, #7c6af7);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: var(--font-mono, monospace);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      flex-shrink: 0;
+      opacity: 0.8;
+      transition: opacity 0.15s;
+    }
+    .tooltip-anchor:hover .tooltip-icon { opacity: 1; }
+    .tooltip-anchor .tooltip-body {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-card, #1e1e2e);
+      border: 1px solid var(--border, #333);
+      border-radius: 6px;
+      padding: 10px 12px;
+      width: 290px;
+      font-size: 11px;
+      font-family: var(--font-mono, monospace);
+      color: var(--text-dim, #aaa);
+      line-height: 1.55;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 999;
+      white-space: normal;
+    }
+    .tooltip-anchor .tooltip-body::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--border, #333);
+    }
+    .tooltip-anchor:hover .tooltip-body { opacity: 1; }
+
+    /* Elite checkbox row */
+    .elite-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .elite-badge {
+      font-size: 10px;
+      font-family: var(--font-mono, monospace);
+      background: linear-gradient(135deg, #f5a623, #e07b20);
+      color: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+  </style>
 </head>
 <body>
 
@@ -74,6 +154,32 @@
               <button class="gen-btn active" data-gen="7">SM</button>
               <button class="gen-btn" data-gen="8">SS</button>
               <button class="gen-btn" data-gen="9">SV</button>
+            </div>
+          </div>
+
+          <!-- ── PVE Map Boosts ── -->
+          <div class="field-section">
+            <div class="map-boost-label-wrap">
+              <label class="field-label" style="margin:0">PVE Map Boosts</label>
+              <span class="tooltip-anchor">
+                <span class="tooltip-icon">?</span>
+                <span class="tooltip-body">
+                  All boosts assume that Player pokemon is of the correct generation or contains an evolution line in the correct generation for the map selected. Left side is Player Pokemon. Right side is Wild Pokemon.
+                </span>
+              </span>
+            </div>
+            <select id="map-boost-select" class="mini-select" style="width:100%;margin-top:6px;font-size:12px">
+              <option value="none">— None —</option>
+              <option value="ancient-dungeon">Ancient Dungeon</option>
+              <option value="battle-zone">Battle Zone</option>
+              <option value="legendary">Legendary Maps</option>
+            </select>
+            <div class="elite-row">
+              <label class="check-label" style="margin:0">
+                <input type="checkbox" id="right-elite" />
+                Right side is Elite
+              </label>
+              <span class="elite-badge">ELITE</span>
             </div>
           </div>
 
