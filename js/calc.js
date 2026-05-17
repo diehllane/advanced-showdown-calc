@@ -225,12 +225,12 @@ class CalcEngine {
     }
 
     // ── Apply PVE map / Elite stat multipliers ──────────────────────────────
-    // HP boosts: smogon's maxHP() uses its own internal formula and ignores
-    // opts.overrides.hp entirely. We back-solve the EV that makes smogon's HP
-    // formula produce the boosted value, then pass it via opts.evs.hp.
+    // opts.overrides is unreliable in smogon/calc v0.9.0 for defensive stats
+    // and HP (maxHP() bypasses it entirely). Instead, for every boosted stat we
+    // back-solve EVs/IVs so smogon's own stat formula produces the target value.
     //
-    // Non-HP boosts: opts.overrides works for offensive/defensive stats in
-    // v0.9.0 because those stats are read from _stats which overrides patches.
+    // We allow EVs up to 508 (smogon accepts them even if the UI caps at 252)
+    // and IVs up to 255 as a second lever for very large multipliers.
     const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
     const hasMults = Object.keys(mults).length > 0;
 
@@ -248,7 +248,8 @@ class CalcEngine {
         spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 5 },
       };
 
-      const overrides = {};
+      const newEvs = { ...opts.evs };
+      const newIvs = { ...opts.ivs };
 
       for (const [statKey, mult] of Object.entries(mults)) {
         if (mult === 1) continue;
@@ -257,32 +258,52 @@ class CalcEngine {
         const base = baseStats[sm.baseKey];
         if (!base) continue;
 
-        const natMod = nat && nat[0] === sm.natIdx ? 1.1
-                     : nat && nat[1] === sm.natIdx ? 0.9 : 1.0;
+        const natMod = statKey !== 'hp'
+          ? (nat && nat[0] === sm.natIdx ? 1.1 : nat && nat[1] === sm.natIdx ? 0.9 : 1.0)
+          : 1.0;
 
-        const rawStat = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
-        const boostedStat = Math.floor(rawStat * mult);
+        const rawStat    = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
+        const targetStat = Math.floor(rawStat * mult);
 
-        if (statKey === 'hp') {
-          // smogon's HP formula: floor((2*base + iv + floor(ev/4)) * lvl/100 + lvl + 10)
-          // Back-solve by iterating EV 0-252 (step 4) to find the smallest EV that
-          // produces a stat >= boostedStat. Default to 252 if nothing lower suffices.
-          const targetHP = boostedStat;
-          let solvedEV = 252;
-          for (let ev = 0; ev <= 252; ev += 4) {
-            const candidate = Math.floor((2 * base + hpIV + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
-            if (candidate >= targetHP) { solvedEV = ev; break; }
+        // First pass: hold IV fixed, scan EV 0..508
+        let solved = false;
+        for (let ev = 0; ev <= 508; ev += 4) {
+          let candidate;
+          if (statKey === 'hp') {
+            candidate = Math.floor((2 * base + sm.iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
+          } else {
+            candidate = Math.floor(Math.floor((2 * base + sm.iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
           }
-          opts.evs = { ...opts.evs, hp: solvedEV };
-          opts.ivs = { ...opts.ivs, hp: hpIV };
-        } else {
-          overrides[statKey] = boostedStat;
+          if (candidate >= targetStat) {
+            newEvs[statKey] = ev;
+            solved = true;
+            break;
+          }
+        }
+
+        // Second pass: if EV alone can't reach target, raise IV too
+        if (!solved) {
+          outer: for (let iv = sm.iv + 1; iv <= 255; iv++) {
+            for (let ev = 0; ev <= 508; ev += 4) {
+              let candidate;
+              if (statKey === 'hp') {
+                candidate = Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
+              } else {
+                candidate = Math.floor(Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
+              }
+              if (candidate >= targetStat) {
+                newEvs[statKey] = ev;
+                newIvs[statKey] = iv;
+                solved = true;
+                break outer;
+              }
+            }
+          }
         }
       }
 
-      if (Object.keys(overrides).length > 0) {
-        opts.overrides = overrides;
-      }
+      opts.evs = newEvs;
+      opts.ivs = newIvs;
     }
 
     return new Pokemon(genObj, state.species, opts);
