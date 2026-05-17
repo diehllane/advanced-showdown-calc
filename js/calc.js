@@ -239,12 +239,12 @@ class CalcEngine {
       const lvl = state.level ?? 100;
 
       const STAT_MAP = {
-        hp:  { baseKey: 'hp',              iv: hpIV,  ev: hp,  natIdx: 0 },
-        atk: { baseKey: 'attack',          iv: atkIV, ev: atk, natIdx: 1 },
-        def: { baseKey: 'defense',         iv: defIV, ev: def, natIdx: 2 },
-        spa: { baseKey: 'special-attack',  iv: spaIV, ev: spa, natIdx: 3 },
-        spd: { baseKey: 'special-defense', iv: spdIV, ev: spd, natIdx: 4 },
-        spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 5 },
+        hp:  { baseKey: 'hp',              iv: hpIV,  ev: hp,  natIdx: -1 }, // HP has no nature modifier
+        atk: { baseKey: 'attack',          iv: atkIV, ev: atk, natIdx: 0 },
+        def: { baseKey: 'defense',         iv: defIV, ev: def, natIdx: 1 },
+        spa: { baseKey: 'special-attack',  iv: spaIV, ev: spa, natIdx: 2 },
+        spd: { baseKey: 'special-defense', iv: spdIV, ev: spd, natIdx: 3 },
+        spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 4 },
       };
 
       for (const [statKey, mult] of Object.entries(mults)) {

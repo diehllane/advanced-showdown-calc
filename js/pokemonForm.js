@@ -177,8 +177,8 @@ class PokemonForm {
     const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 
     const rows = STAT_NAMES.map((name, i) => {
-      const isBoostStat  = nat && nat[0] === i;
-      const isReduceStat = nat && nat[1] === i;
+      const isBoostStat  = nat && (nat[0] + 1) === i;
+      const isReduceStat = nat && (nat[1] + 1) === i;
       const cls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       const base = this.speciesData?.stats ? this._baseStatForIndex(i) : '–';
       const evPct = Math.round((this.state.evs[i] / 252) * 100);
@@ -253,8 +253,8 @@ class PokemonForm {
       // HP formula
       return Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
     }
-    const natMod = nat && nat[0] === statIdx ? 1.1
-                 : nat && nat[1] === statIdx ? 0.9 : 1;
+    const natMod = nat && (nat[0] + 1) === statIdx ? 1.1
+                 : nat && (nat[1] + 1) === statIdx ? 0.9 : 1;
     return Math.floor(Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
   }
 
