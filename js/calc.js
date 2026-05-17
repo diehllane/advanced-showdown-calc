@@ -224,17 +224,16 @@ class CalcEngine {
       opts.abilityOn = true;
     }
 
-    // ── Apply PVE map / Elite stat multipliers ──────────────────────────────
-    // opts.overrides is unreliable in smogon/calc v0.9.0 for defensive stats
-    // and HP (maxHP() bypasses it entirely). Instead, for every boosted stat we
-    // back-solve EVs/IVs so smogon's own stat formula produces the target value.
-    //
-    // We allow EVs up to 508 (smogon accepts them even if the UI caps at 252)
-    // and IVs up to 255 as a second lever for very large multipliers.
-    const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
-    const hasMults = Object.keys(mults).length > 0;
+    const pokemon = new Pokemon(genObj, state.species, opts);
 
-    if (hasMults && form?.speciesData?.stats) {
+    // ── Apply PVE map / Elite stat multipliers ──────────────────────────────
+    // smogon/calc v0.9.0 stores computed stats in pokemon.stats (a plain object)
+    // and maxHP() reads pokemon.stats.hp directly. We construct the Pokemon
+    // normally, then overwrite pokemon.stats[key] with the boosted integer.
+    // This is the only approach that works for all stats including HP regardless
+    // of multiplier magnitude — no EV/IV back-solving needed.
+    const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
+    if (Object.keys(mults).length > 0 && form?.speciesData?.stats) {
       const baseStats = form.speciesData.stats;
       const nat = NATURE_EFFECTS[state.nature];
       const lvl = state.level ?? 100;
@@ -248,9 +247,6 @@ class CalcEngine {
         spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 5 },
       };
 
-      const newEvs = { ...opts.evs };
-      const newIvs = { ...opts.ivs };
-
       for (const [statKey, mult] of Object.entries(mults)) {
         if (mult === 1) continue;
         const sm = STAT_MAP[statKey];
@@ -263,50 +259,20 @@ class CalcEngine {
           : 1.0;
 
         const rawStat    = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
-        const targetStat = Math.floor(rawStat * mult);
+        const boostedStat = Math.floor(rawStat * mult);
 
-        // First pass: hold IV fixed, scan EV 0..508
-        let solved = false;
-        for (let ev = 0; ev <= 508; ev += 4) {
-          let candidate;
-          if (statKey === 'hp') {
-            candidate = Math.floor((2 * base + sm.iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
-          } else {
-            candidate = Math.floor(Math.floor((2 * base + sm.iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
-          }
-          if (candidate >= targetStat) {
-            newEvs[statKey] = ev;
-            solved = true;
-            break;
-          }
-        }
-
-        // Second pass: if EV alone can't reach target, raise IV too
-        if (!solved) {
-          outer: for (let iv = sm.iv + 1; iv <= 255; iv++) {
-            for (let ev = 0; ev <= 508; ev += 4) {
-              let candidate;
-              if (statKey === 'hp') {
-                candidate = Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
-              } else {
-                candidate = Math.floor(Math.floor((2 * base + iv + Math.floor(ev / 4)) * lvl / 100 + 5) * natMod);
-              }
-              if (candidate >= targetStat) {
-                newEvs[statKey] = ev;
-                newIvs[statKey] = iv;
-                solved = true;
-                break outer;
-              }
-            }
-          }
-        }
+        // Patch both rawStats and stats on the constructed Pokemon object.
+        // smogon/calc v0.9.0 gen789 mechanics reads rawStats for the damage
+        // formula when no boost is applied (lines 914/1064 in gen789.js), and
+        // maxHP() reads rawStats.hp exclusively. stats[stat] is re-derived from
+        // rawStats at calc time for boosted cases (line 314/316). Patching both
+        // ensures every read path in the damage pipeline sees the boosted value.
+        if (pokemon.rawStats) pokemon.rawStats[statKey] = boostedStat;
+        if (pokemon.stats)    pokemon.stats[statKey]    = boostedStat;
       }
-
-      opts.evs = newEvs;
-      opts.ivs = newIvs;
     }
 
-    return new Pokemon(genObj, state.species, opts);
+    return pokemon;
   }
 
   _buildField(gen, atkState, defState) {
