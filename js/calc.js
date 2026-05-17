@@ -224,7 +224,13 @@ class CalcEngine {
       opts.abilityOn = true;
     }
 
-    // ── Apply PVE map / Elite stat multipliers via overrides ────────────────
+    // ── Apply PVE map / Elite stat multipliers ──────────────────────────────
+    // HP boosts: smogon's maxHP() uses its own internal formula and ignores
+    // opts.overrides.hp entirely. We back-solve the EV that makes smogon's HP
+    // formula produce the boosted value, then pass it via opts.evs.hp.
+    //
+    // Non-HP boosts: opts.overrides works for offensive/defensive stats in
+    // v0.9.0 because those stats are read from _stats which overrides patches.
     const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
     const hasMults = Object.keys(mults).length > 0;
 
@@ -233,8 +239,6 @@ class CalcEngine {
       const nat = NATURE_EFFECTS[state.nature];
       const lvl = state.level ?? 100;
 
-      // Map stat key to [baseStatKey, ivIndex, evIndex, natStatIndex]
-      // natStatIndex: index in STAT_NAMES for nature effect lookup (0=hp,1=atk,2=def,3=spa,4=spd,5=spe)
       const STAT_MAP = {
         hp:  { baseKey: 'hp',              iv: hpIV,  ev: hp,  natIdx: 0 },
         atk: { baseKey: 'attack',          iv: atkIV, ev: atk, natIdx: 1 },
@@ -257,7 +261,23 @@ class CalcEngine {
                      : nat && nat[1] === sm.natIdx ? 0.9 : 1.0;
 
         const rawStat = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
-        overrides[statKey] = Math.floor(rawStat * mult);
+        const boostedStat = Math.floor(rawStat * mult);
+
+        if (statKey === 'hp') {
+          // smogon's HP formula: floor((2*base + iv + floor(ev/4)) * lvl/100 + lvl + 10)
+          // Back-solve by iterating EV 0-252 (step 4) to find the smallest EV that
+          // produces a stat >= boostedStat. Default to 252 if nothing lower suffices.
+          const targetHP = boostedStat;
+          let solvedEV = 252;
+          for (let ev = 0; ev <= 252; ev += 4) {
+            const candidate = Math.floor((2 * base + hpIV + Math.floor(ev / 4)) * lvl / 100 + lvl + 10);
+            if (candidate >= targetHP) { solvedEV = ev; break; }
+          }
+          opts.evs = { ...opts.evs, hp: solvedEV };
+          opts.ivs = { ...opts.ivs, hp: hpIV };
+        } else {
+          overrides[statKey] = boostedStat;
+        }
       }
 
       if (Object.keys(overrides).length > 0) {
