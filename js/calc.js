@@ -652,14 +652,35 @@ function _checked(id) {
   return document.getElementById(id)?.checked ?? false;
 }
 
-// Wire up Map Boost controls to trigger recalc on change
+// ── Global PVE multiplier helper ─────────────────────────────────────────────
+// Called by pokemonForm.js to apply map/Elite multipliers to the Total column.
+// boostSide: 'left' | 'right'
+// isElite: only ever true for the right (wild) side
+window.getPVEMultipliers = function(boostSide, isElite) {
+  const mapKey = document.getElementById('map-boost-select')?.value ?? 'none';
+  const mapMults = MAP_BOOSTS[mapKey]?.[boostSide] ?? {};
+  const mults = { ...mapMults };
+  if (isElite) {
+    const mapBoostsStats = STAT_BOOSTING_MAPS.has(mapKey);
+    mults.hp = (mults.hp ?? 1) * 1.3;
+    if (!mapBoostsStats) {
+      for (const stat of ['atk', 'def', 'spa', 'spd', 'spe']) {
+        mults[stat] = (mults[stat] ?? 1) * 1.3;
+      }
+    }
+  }
+  return mults;
+};
+
+// Wire up Map Boost controls to trigger recalc AND re-render both forms
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('map-boost-select')?.addEventListener('change', () => {
+  const onMapChange = () => {
+    window.attackerForm?.render();
+    window.defenderForm?.render();
     window.appCalc?.scheduleCalc();
-  });
-  document.getElementById('right-elite')?.addEventListener('change', () => {
-    window.appCalc?.scheduleCalc();
-  });
+  };
+  document.getElementById('map-boost-select')?.addEventListener('change', onMapChange);
+  document.getElementById('right-elite')?.addEventListener('change', onMapChange);
 });
 
 // Exposed globally

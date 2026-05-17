@@ -157,18 +157,55 @@ class PokemonForm {
 
   _renderAbilityRow() { return ''; } // Merged into _renderNatureItemRow
 
+  // ── PVE multiplier lookup for this form's side ────────────────────────────
+  // Called during render so the Total column reflects active map/Elite boosts.
+  // Returns { hp, atk, def, spa, spd, spe } — only keys with mult != 1 present.
+  _getPVEMults() {
+    if (typeof window.getPVEMultipliers !== 'function') return {};
+    const boostSide = this.role === 'attacker' ? 'left' : 'right';
+    const isElite   = this.role === 'defender'
+      ? (document.getElementById('right-elite')?.checked ?? false)
+      : false;
+    return window.getPVEMultipliers(boostSide, isElite);
+  }
+
   _renderStats() {
     const nat = NATURE_EFFECTS[this.state.nature];
+    // Resolve PVE multipliers once for this render pass
+    const pveMults = this._getPVEMults();
+    // Stat key order matching STAT_NAMES indices
+    const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+
     const rows = STAT_NAMES.map((name, i) => {
-      const isBoostStat = nat && nat[0] === i;
+      const isBoostStat  = nat && nat[0] === i;
       const isReduceStat = nat && nat[1] === i;
       const cls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
       const base = this.speciesData?.stats ? this._baseStatForIndex(i) : '–';
-      // EV bar width — capped shorter so there's room for the calced stat
       const evPct = Math.round((this.state.evs[i] / 252) * 100);
-      // Computed final stat value
-      const calced = this.speciesData?.stats ? this._calcStatValue(i) : '–';
+
+      // Base stat value (no PVE)
+      const rawCalced = this.speciesData?.stats ? this._calcStatValue(i) : '–';
+
+      // Apply PVE multiplier if present
+      const statKey = STAT_KEYS[i];
+      const pveMult = pveMults[statKey];
+      let calced = rawCalced;
+      let pveActive = false;
+      if (pveMult && pveMult !== 1 && rawCalced !== '–') {
+        calced = Math.floor(rawCalced * pveMult);
+        pveActive = true;
+      }
+
       const calcedCls = isBoostStat ? 'nat-up' : isReduceStat ? 'nat-down' : '';
+
+      // When a PVE boost is active, show boosted value in accent colour with a marker
+      const calcedStyle = pveActive
+        ? 'color:var(--accent,#7c6af7);font-weight:700'
+        : '';
+      const calcedLabel = pveActive
+        ? `<span title="PVE boosted (×${pveMult})" style="${calcedStyle}">${calced}*</span>`
+        : `<span class="${calcedCls}" style="font-weight:600">${calced}</span>`;
+
       return `
         <div class="stat-row" style="display:grid;grid-template-columns:36px 52px 72px 58px 1fr 44px 44px;gap:4px;align-items:center">
           <span class="stat-label ${cls}">${name}</span>
@@ -185,7 +222,7 @@ class PokemonForm {
             <div class="stat-bar" style="width:${evPct}%"></div>
           </div>
           <span class="stat-label" style="text-align:right;color:var(--text-muted)">${base}</span>
-          <span class="stat-label ${calcedCls}" style="text-align:right;font-weight:600">${calced}</span>
+          <span class="stat-label" style="text-align:right">${calcedLabel}</span>
         </div>
       `;
     });
@@ -265,8 +302,13 @@ class PokemonForm {
               <input type="number" id="${this.role}-curhp" value="${this.state.curHP ?? 100}" min="1" max="100" style="width:76px" />
               <span style="color:var(--text-muted);font-size:12px;font-family:var(--font-mono)">%</span>
               ${(() => {
-                const maxHP = this._calcStatValue(0);
-                if (maxHP === '–') return '';
+                const rawHP = this._calcStatValue(0);
+                if (rawHP === '–') return '';
+                // Use PVE-boosted HP for the display if applicable
+                const pveMults = this._getPVEMults();
+                const maxHP = pveMults.hp && pveMults.hp !== 1
+                  ? Math.floor(rawHP * pveMults.hp)
+                  : rawHP;
                 const pct = this.state.curHP ?? 100;
                 const actual = Math.floor(maxHP * pct / 100);
                 return `<span id="${this.role}-curhp-display" style="color:var(--text-dim);font-size:12px;font-family:var(--font-mono)">${actual} / ${maxHP} HP</span>`;
@@ -280,7 +322,6 @@ class PokemonForm {
 
   _renderMoves() {
     const moves = this.state.moves.map((mv, i) => {
-      // Match hidden-power-fire etc. against hidden-power in the available moves list
       const mvBase = mv.startsWith('hidden-power-') ? 'hidden-power' : mv;
       const opts = this.availableMoves.map(m =>
         `<option value="${m}" ${m===mv || m===mvBase?'selected':''}>${_moveName(m)}</option>`
@@ -375,8 +416,12 @@ class PokemonForm {
         this.state.curHP = parseInt(curHPEl.value) || 100;
         const displayEl = get(`${r}-curhp-display`);
         if (displayEl) {
-          const maxHP = this._calcStatValue(0);
-          if (maxHP !== '–') {
+          const rawHP = this._calcStatValue(0);
+          if (rawHP !== '–') {
+            const pveMults = this._getPVEMults();
+            const maxHP = pveMults.hp && pveMults.hp !== 1
+              ? Math.floor(rawHP * pveMults.hp)
+              : rawHP;
             const actual = Math.floor(maxHP * this.state.curHP / 100);
             displayEl.textContent = `${actual} / ${maxHP} HP`;
           }
@@ -401,7 +446,6 @@ class PokemonForm {
       sel.addEventListener('change', () => {
         const idx = +sel.dataset.idx;
         this.state.moves[idx] = sel.value;
-        // If this is the active move slot, trigger a re-calc
         if (window.appState && window.appState.activeMoveSlot === idx) {
           window.appCalc?.scheduleCalc();
         }
@@ -419,8 +463,6 @@ class PokemonForm {
         window.appState.activeMoveRole = this.role;
         window.appState[`${this.role}ActiveMove`] = moveSlug;
         window.appCalc?.scheduleCalc();
-        // Show learn method and type coverage
-        // The move's target is whichever panel is NOT the attacker
         const defForm = this.role === 'attacker' ? window.defenderForm : window.attackerForm;
         window.appCalc?.showLearnMethod(this.state.species, moveSlug, this.currentGen);
         window.appCalc?.showMoveTypeCoverage(moveSlug, defForm?.getState(), defForm);
@@ -432,13 +474,11 @@ class PokemonForm {
     if (!species) return;
     this.speciesData = await getPokemonBaseData(species);
     this.availableMoves = await getPokemonMoves(species, this.currentGen);
-    // Sort: alphabetical but by display name
     this.availableMoves.sort();
     this.render();
   }
 
   async _suggestSpecies(partial) {
-    // Use PokeAPI's species list (first 1025 loaded once)
     if (!window._allSpecies) {
       try {
         const r = await fetch(`${POKEAPI}/pokemon?limit=1025`);
