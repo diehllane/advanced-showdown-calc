@@ -123,7 +123,13 @@ class CalcEngine {
       attacker.curHP = atkCurHP;
       defender.curHP = defCurHP;
 
-      const moveName = _moveName(activeMoveSlug);
+      // Hidden Power: derive type from attacker IVs when no type suffix in slug
+      let resolvedMoveSlug = activeMoveSlug;
+      if (activeMoveSlug === 'hidden-power') {
+        const hpType = this._calcHiddenPowerType(atkState.ivs ?? [31,31,31,31,31,31]);
+        resolvedMoveSlug = `hidden-power-${hpType.toLowerCase()}`;
+      }
+      const moveName = _moveName(resolvedMoveSlug);
       const move = new Move(genObj, moveName, {
         isCrit: atkState.isCriticalHit,
       });
@@ -224,14 +230,18 @@ class CalcEngine {
       opts.abilityOn = true;
     }
 
-    const pokemon = new Pokemon(genObj, state.species, opts);
-
     // ── Apply PVE map / Elite stat multipliers ──────────────────────────────
-    // smogon/calc v0.9.0 stores computed stats in pokemon.stats (a plain object)
-    // and maxHP() reads pokemon.stats.hp directly. We construct the Pokemon
-    // normally, then overwrite pokemon.stats[key] with the boosted integer.
-    // This is the only approach that works for all stats including HP regardless
-    // of multiplier magnitude — no EV/IV back-solving needed.
+    // opts.overrides merges into this.species in the Pokemon constructor (line 35
+    // of pokemon.js): extend(true, {}, gen.species.get(name), options.overrides).
+    // calcStat() then reads this.species.baseStats[stat] — so passing
+    // opts.overrides = { baseStats: { atk: fakeBase } } makes smogon compute the
+    // final stat from our fake base via its own formula, correctly applying IVs,
+    // EVs, level, and nature. This works for all stats including HP and maxHP().
+    //
+    // We back-solve the fake base stat from the target final stat using the
+    // closed-form inverse of calcStatADV:
+    //   non-HP: base = ceil( (ceil(target / natMod) - 5) * 100/lvl - iv - floor(ev/4) ) / 2
+    //   HP:     base = ceil( (target - lvl - 10) * 100/lvl - iv - floor(ev/4) ) / 2
     const mults = this._resolveStatMultipliers(mapKey, boostSide, isElite);
     if (Object.keys(mults).length > 0 && form?.speciesData?.stats) {
       const baseStats = form.speciesData.stats;
@@ -239,13 +249,15 @@ class CalcEngine {
       const lvl = state.level ?? 100;
 
       const STAT_MAP = {
-        hp:  { baseKey: 'hp',              iv: hpIV,  ev: hp,  natIdx: -1 }, // HP has no nature modifier
-        atk: { baseKey: 'attack',          iv: atkIV, ev: atk, natIdx: 0 },
-        def: { baseKey: 'defense',         iv: defIV, ev: def, natIdx: 1 },
-        spa: { baseKey: 'special-attack',  iv: spaIV, ev: spa, natIdx: 2 },
-        spd: { baseKey: 'special-defense', iv: spdIV, ev: spd, natIdx: 3 },
-        spe: { baseKey: 'speed',           iv: speIV, ev: spe, natIdx: 4 },
+        hp:  { baseKey: 'hp',              smogonKey: 'hp',  iv: hpIV,  ev: hp,  natIdx: -1 },
+        atk: { baseKey: 'attack',          smogonKey: 'atk', iv: atkIV, ev: atk, natIdx: 0 },
+        def: { baseKey: 'defense',         smogonKey: 'def', iv: defIV, ev: def, natIdx: 1 },
+        spa: { baseKey: 'special-attack',  smogonKey: 'spa', iv: spaIV, ev: spa, natIdx: 2 },
+        spd: { baseKey: 'special-defense', smogonKey: 'spd', iv: spdIV, ev: spd, natIdx: 3 },
+        spe: { baseKey: 'speed',           smogonKey: 'spe', iv: speIV, ev: spe, natIdx: 4 },
       };
+
+      const fakeBaseStats = {};
 
       for (const [statKey, mult] of Object.entries(mults)) {
         if (mult === 1) continue;
@@ -259,20 +271,34 @@ class CalcEngine {
           : 1.0;
 
         const rawStat    = this._computeRawStat(statKey, base, sm.iv, sm.ev, lvl, natMod);
-        const boostedStat = Math.floor(rawStat * mult);
+        const targetStat = Math.floor(rawStat * mult);
 
-        // Patch both rawStats and stats on the constructed Pokemon object.
-        // smogon/calc v0.9.0 gen789 mechanics reads rawStats for the damage
-        // formula when no boost is applied (lines 914/1064 in gen789.js), and
-        // maxHP() reads rawStats.hp exclusively. stats[stat] is re-derived from
-        // rawStats at calc time for boosted cases (line 314/316). Patching both
-        // ensures every read path in the damage pipeline sees the boosted value.
-        if (pokemon.rawStats) pokemon.rawStats[statKey] = boostedStat;
-        if (pokemon.stats)    pokemon.stats[statKey]    = boostedStat;
+        // Back-solve fake base stat (integer) such that smogon's calcStatADV
+        // produces exactly targetStat. We use Math.ceil for the inverse then
+        // verify with a forward pass, nudging up by 1 if needed due to flooring.
+        let fakeBase;
+        const ivContrib = sm.iv + Math.floor(sm.ev / 4);
+        if (statKey === 'hp') {
+          fakeBase = Math.ceil(((targetStat - lvl - 10) * 100 / lvl - ivContrib) / 2);
+        } else {
+          const inner = Math.ceil(targetStat / natMod);
+          fakeBase = Math.ceil(((inner - 5) * 100 / lvl - ivContrib) / 2);
+        }
+        // Forward verify and nudge
+        for (let bump = 0; bump <= 2; bump++) {
+          const check = this._computeRawStat(statKey, fakeBase + bump, sm.iv, sm.ev, lvl, natMod);
+          if (check >= targetStat) { fakeBase = fakeBase + bump; break; }
+        }
+
+        fakeBaseStats[sm.smogonKey] = fakeBase;
+      }
+
+      if (Object.keys(fakeBaseStats).length > 0) {
+        opts.overrides = { baseStats: fakeBaseStats };
       }
     }
 
-    return pokemon;
+    return new Pokemon(genObj, state.species, opts);
   }
 
   _buildField(gen, atkState, defState) {
@@ -536,6 +562,22 @@ class CalcEngine {
     return chip;
   }
 
+
+  // ── Hidden Power type calculation ─────────────────────────────────────────
+  // Gen 3+ formula: type index = floor(((lsb sum * 40) / 63)
+  // where lsb sum = hp*1 + atk*2 + def*4 + spe*8 + spa*16 + spd*32
+  // each bit = IV mod 2
+  _calcHiddenPowerType(ivs) {
+    const HP_TYPES = [
+      'Fighting','Flying','Poison','Ground','Rock','Bug','Ghost','Steel',
+      'Fire','Water','Grass','Electric','Psychic','Ice','Dragon','Dark',
+    ];
+    const [hp, atk, def, spa, spd, spe] = ivs;
+    const bits = (hp%2)*1 + (atk%2)*2 + (def%2)*4 + (spe%2)*8 + (spa%2)*16 + (spd%2)*32;
+    const typeIdx = Math.floor((bits * 40) / 63);
+    return HP_TYPES[typeIdx] ?? 'Dark';
+  }
+
   _koChanceText(dmgRange, defHP) {
     const ohkos = dmgRange.filter(d => d >= defHP).length;
     if (ohkos === 16) return 'Guaranteed OHKO';
@@ -575,9 +617,17 @@ class CalcEngine {
 
     const moveApiSlug = moveSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const hpMatch = moveApiSlug.match(/^hidden-power-(.+)$/);
-    const hpType = hpMatch ? hpMatch[1] : null;
+    // If slug is bare 'hidden-power', derive type from the attacker's IVs
+    const hpType = hpMatch
+      ? hpMatch[1]
+      : (moveApiSlug === 'hidden-power'
+          ? this._calcHiddenPowerType(
+              (window.appState?.activeMoveRole === 'attacker'
+                ? window.attackerForm : window.defenderForm)?.getState()?.ivs ?? [31,31,31,31,31,31]
+            ).toLowerCase()
+          : null);
 
-    fetchPokeAPI(`/move/${hpType ? 'hidden-power' : moveApiSlug}`).then(moveData => {
+    fetchPokeAPI(`/move/hidden-power`).then(moveData => {
       const rawType = hpType ?? moveData?.type?.name;
       if (!rawType) { el.innerHTML = ''; return; }
       const capType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
